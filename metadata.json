@@ -1,0 +1,6 @@
+{
+  "name": "LegisParticipa - Calendário de Participação Cidadã",
+  "description": "Agrupador nacional dos 5 mecanismos de participação cidadã do legislativo brasileiro: Audiências Públicas, Consultas, Sugestões, Diálogos Sociais e Tribuna Livre.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
