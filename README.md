@@ -49,6 +49,20 @@ A honestidade sobre a cobertura é uma regra do projeto. **Não** descreva este 
 
 Exemplos do que foi encontrado ali: **BA** tem o filtro "Audiência Pública" no sistema de sessões mas ele devolve zero registros (o mesmo filtro com "Ordinária" devolve 217 páginas — ou seja, a ausência é real) e o portal está sob suspensão eleitoral até 25/10/2026; **ES** publica 4.582 eventos de 2017 até hoje, **nenhum futuro**; **SC** responde zero para "audiência" na busca do próprio portal, contra 22 para "reunião"; **TO** tem a API de audiências funcionando, com zero registros desde sempre.
 
+### ⚠️ Limitação operacional conhecida: região da função
+
+A função roda por padrão na região `cmh` (Ohio, EUA), e **três casas não são alcançáveis de lá**:
+
+| Casa | Comportamento da região padrão | Daqui (Brasil) |
+| :--- | :--- | :--- |
+| DF (CLDF) | falha de conexão após 10,5 s | conecta em 0,22 s, responde em 1,9 s |
+| PE (ALEPE) | estoura o orçamento de 12 s | responde em 9 s |
+| RS (ALRS) | estoura o orçamento de 12 s | responde em 0,7 s |
+
+Não é limitação dos portais: é distância. Para corrigir, mude a região da função para **São Paulo (`gru`)** em *Project configuration → Cloud compute → Functions → Region*, no painel da Netlify. Enquanto isso, o app mostra as três como falha na coleta, e a mensagem diz exatamente isso.
+
+A função usa orçamento de **12 s por consulta** — não um teto por casa — porque ela espera todas as casas antes de responder: uma casa lenta atrasaria a resposta de todas, inclusive das que já terminaram. Quem não cabe no orçamento é reportado como não respondido, e o cache de 10 minutos do contêiner faz a consulta seguinte aproveitar melhor.
+
 ### Por que existe um backend
 
 Nenhum portal de assembleia estadual publica cabeçalho CORS, então o navegador não consegue lê-los. O servidor não tem essa restrição. **Essa é a única razão de haver backend neste projeto** — e é também o motivo de a função nunca devolver dado que não tenha conseguido ler.
