@@ -65,6 +65,23 @@ const TETO_POR_CASA_MS = 12_000;
  */
 const TETO_MAXIMO_POR_CASA_MS = 20_000;
 
+/**
+ * Orçamento de tempo da consulta inteira.
+ *
+ * A função espera TODAS as casas antes de responder, então uma casa lenta atrasa
+ * a resposta de todas — inclusive das que já terminaram. Este orçamento define o
+ * teto efetivo de cada casa como "o que resta do orçamento", de modo que a
+ * consulta devolva o que foi coletado em vez de segurar todo mundo pela mais
+ * lenta. Quem não couber no orçamento é reportado como não respondido, com o
+ * motivo — e o cache faz a próxima consulta aproveitar.
+ *
+ * Medição que define o número: as casas alcançáveis respondem em até ~6 s a
+ * partir da região padrão da função, e três (CLDF, ALEPE, ALRS) não respondem de
+ * lá de jeito nenhum — uma falha de conexão e duas acima de 20 s, enquanto daqui
+ * respondem em 0,2 s a 9 s. Ou seja: a demora delas é geográfica, não do portal.
+ */
+const ORCAMENTO_GLOBAL_MS = 12_000;
+
 /** TTL do cache em memória do contêiner (chamadas repetidas do mesmo usuário). */
 const TTL_CACHE_MS = 10 * 60 * 1000;
 
@@ -87,7 +104,10 @@ async function emParalelo<T>(tarefas: Array<() => Promise<T>>, limite: number): 
   return saida;
 }
 
-async function executarAdaptador(adaptador: Adaptador): Promise<ResultadoCasa> {
+async function executarAdaptador(
+  adaptador: Adaptador,
+  orcamentoRestanteMs: number
+): Promise<ResultadoCasa> {
   const inicio = Date.now();
   const base: ResultadoCasa = {
     uf: adaptador.uf,
@@ -107,10 +127,14 @@ async function executarAdaptador(adaptador: Adaptador): Promise<ResultadoCasa> {
   }
 
   try {
-    const eventos = await comTeto(
-      adaptador.executar({ buscarTexto }),
-      Math.min(adaptador.tetoMs ?? TETO_POR_CASA_MS, TETO_MAXIMO_POR_CASA_MS)
+    // O teto efetivo é o menor entre: o declarado pelo adaptador, a trava
+    // absoluta e o que resta do orçamento da consulta.
+    const tetoEfetivo = Math.min(
+      adaptador.tetoMs ?? TETO_POR_CASA_MS,
+      TETO_MAXIMO_POR_CASA_MS,
+      orcamentoRestanteMs
     );
+    const eventos = await comTeto(adaptador.executar({ buscarTexto }), tetoEfetivo);
     return {
       ...base,
       status: eventos.length > 0 ? 'sucesso' : 'vazio',
@@ -187,11 +211,14 @@ async function tratarRequisicao(req: Request): Promise<Response> {
   const emCache = cache.get(chaveCache);
   const usarCache = !ignorarCache && emCache && emCache.expira > Date.now();
 
+  const inicioGlobal = Date.now();
   const casas = usarCache
     ? emCache.resultado
     : await emParalelo(
         // Só as casas verificadas geram requisição; as demais resolvem na hora.
-        alvo.map((adaptador) => () => executarAdaptador(adaptador)),
+        alvo.map((adaptador) => () =>
+          executarAdaptador(adaptador, ORCAMENTO_GLOBAL_MS - (Date.now() - inicioGlobal))
+        ),
         CONCORRENCIA
       );
 
