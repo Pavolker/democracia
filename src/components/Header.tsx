@@ -1,7 +1,25 @@
 import React from 'react';
-import { RefreshCw, Moon, Sun, Monitor, Bell, Bookmark, SlidersHorizontal, BarChart3, Database } from 'lucide-react';
+import {
+  RefreshCw,
+  Moon,
+  Sun,
+  Monitor,
+  SlidersHorizontal,
+  BarChart3,
+  Database,
+  FlaskConical
+} from 'lucide-react';
 
 export type TabType = 'eventos' | 'mapa' | 'calendario' | 'favoritos' | 'alertas' | 'comparador' | 'fontes';
+
+export interface ResumoSincronizacao {
+  /** Fontes consultadas de fato nesta rodada. */
+  consultadas: number;
+  sucesso: number;
+  erro: number;
+  /** Fontes catalogadas cuja coleta ainda não foi implementada. */
+  pendentes: number;
+}
 
 interface HeaderProps {
   currentTab: TabType;
@@ -9,37 +27,59 @@ interface HeaderProps {
   isUpdating: boolean;
   onRefresh: () => void;
   ultimaAtualizacao: string | null;
+  resumoSync: ResumoSincronizacao | null;
   totalFavoritos: number;
-  totalAlertasAtivos: number;
+  totalFiltrosAtivos: number;
   theme: 'dark' | 'light' | 'system';
   onToggleTheme: () => void;
   autoUpdate: boolean;
   onToggleAutoUpdate: () => void;
+  modoDemo: boolean;
+  onToggleModoDemo: () => void;
   onOpenMobileFilters?: () => void;
 }
 
+/**
+ * Cabeçalho global.
+ *
+ * Correção de honestidade: antes exibia "Sincronizado: HH:MM" incondicionalmente,
+ * porque App.tsx gravava a hora mesmo quando todas as consultas falhavam. Agora o
+ * rótulo descreve o resultado real da última rodada (quantas fontes responderam),
+ * e a data inválida deixa de virar "Invalid Date".
+ */
 export const Header: React.FC<HeaderProps> = ({
   currentTab,
   onSelectTab,
   isUpdating,
   onRefresh,
   ultimaAtualizacao,
+  resumoSync,
   totalFavoritos,
-  totalAlertasAtivos,
+  totalFiltrosAtivos,
   theme,
   onToggleTheme,
   autoUpdate,
   onToggleAutoUpdate,
+  modoDemo,
+  onToggleModoDemo,
   onOpenMobileFilters
 }) => {
-  const formatTime = (isoString: string | null) => {
-    if (!isoString) return 'Hoje';
-    try {
-      const d = new Date(isoString);
-      return d.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
-    } catch {
-      return 'Agora';
+  const formatarHora = (iso: string | null): string | null => {
+    if (!iso) return null;
+    const data = new Date(iso);
+    if (Number.isNaN(data.getTime())) return null;
+    return data.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+  };
+
+  const hora = formatarHora(ultimaAtualizacao);
+
+  const textoUltimaConsulta = (): string => {
+    if (isUpdating) return 'Consultando fontes…';
+    if (!resumoSync) return 'Nenhuma consulta feita nesta sessão';
+    if (resumoSync.sucesso === 0 && resumoSync.erro > 0) {
+      return `Última consulta às ${hora ?? '--:--'}: nenhuma das ${resumoSync.consultadas} fontes respondeu`;
     }
+    return `Última consulta às ${hora ?? '--:--'}: ${resumoSync.sucesso} de ${resumoSync.consultadas} fontes responderam`;
   };
 
   const navItems: Array<{ id: TabType; label: string; badge?: number; icon?: React.ReactNode }> = [
@@ -47,18 +87,23 @@ export const Header: React.FC<HeaderProps> = ({
     { id: 'mapa', label: 'Mapa Brasil' },
     { id: 'calendario', label: 'Calendário Mensal' },
     { id: 'favoritos', label: 'Salvos & Histórico', badge: totalFavoritos },
-    { id: 'alertas', label: 'Alertas Cidadãos', badge: totalAlertasAtivos },
+    // O recurso é um filtro salvo conferido sob demanda, não um serviço de
+    // notificação. O rótulo acompanha o que ele faz.
+    { id: 'alertas', label: 'Filtros Salvos', badge: totalFiltrosAtivos },
     { id: 'comparador', label: 'Comparador', icon: <BarChart3 className="w-3.5 h-3.5" /> },
-    { id: 'fontes', label: 'Fontes & Teste', icon: <Database className="w-3.5 h-3.5" /> }
+    { id: 'fontes', label: 'Fontes & Cobertura', icon: <Database className="w-3.5 h-3.5" /> }
   ];
 
   return (
     <header className="sticky top-0 z-40 w-full bg-white/95 dark:bg-slate-900/95 backdrop-blur-md border-b border-slate-200 dark:border-slate-800 transition-colors">
-      {/* Top Branding Bar */}
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex items-center justify-between h-16 gap-4">
-          {/* Logo & Tagline */}
-          <div className="flex items-center gap-3 cursor-pointer" onClick={() => onSelectTab('eventos')}>
+          {/* Marca */}
+          <button
+            type="button"
+            onClick={() => onSelectTab('eventos')}
+            className="flex items-center gap-3 text-left rounded-2xl focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-600"
+          >
             <div className="w-10 h-10 rounded-2xl bg-gradient-to-br from-emerald-600 to-teal-800 flex items-center justify-center text-white shadow-md shadow-emerald-500/20 text-xl font-black">
               🏛️
             </div>
@@ -75,79 +120,107 @@ export const Header: React.FC<HeaderProps> = ({
                 Audiências, Consultas, Sugestões, Diálogos Sociais e Tribuna Livre
               </p>
             </div>
-          </div>
+          </button>
 
-          {/* Controls: Refresh, Auto-Update, Dark Mode */}
+          {/* Controles */}
           <div className="flex items-center gap-2 sm:gap-3">
-            {/* Last update & refresh button */}
             <div className="flex items-center gap-2 text-xs">
-              <span className="hidden md:inline-block text-slate-500 dark:text-slate-400">
-                Sincronizado: <strong className="text-slate-700 dark:text-slate-200">{formatTime(ultimaAtualizacao)}</strong>
+              <span className="hidden md:inline-block text-slate-500 dark:text-slate-400" title={textoUltimaConsulta()}>
+                {textoUltimaConsulta()}
               </span>
 
               <button
+                type="button"
                 onClick={onRefresh}
                 disabled={isUpdating}
-                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 text-xs font-medium transition-all disabled:opacity-50"
-                title="Sincronizar dados das fontes oficiais agora"
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 text-xs font-medium transition-all disabled:opacity-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-600"
+                aria-label={isUpdating ? 'Consultando fontes oficiais' : 'Consultar fontes oficiais agora'}
               >
-                <RefreshCw className={`w-3.5 h-3.5 ${isUpdating ? 'animate-spin text-emerald-500' : ''}`} />
-                <span className="hidden sm:inline">{isUpdating ? 'Buscando...' : 'Atualizar'}</span>
+                <RefreshCw className={`w-3.5 h-3.5 ${isUpdating ? 'animate-spin text-emerald-500' : ''}`} aria-hidden="true" />
+                <span className="hidden sm:inline">{isUpdating ? 'Buscando…' : 'Atualizar'}</span>
               </button>
             </div>
 
-            {/* Auto-update badge button */}
+            {/* Modo demonstração */}
             <button
+              type="button"
+              onClick={onToggleModoDemo}
+              aria-pressed={modoDemo}
+              className={`hidden md:flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl text-xs font-medium border transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-amber-500 ${
+                modoDemo
+                  ? 'bg-amber-50 text-amber-800 border-amber-300 dark:bg-amber-950/40 dark:text-amber-300 dark:border-amber-800'
+                  : 'bg-slate-100 text-slate-500 border-slate-200 dark:bg-slate-800 dark:text-slate-400 dark:border-slate-700'
+              }`}
+              title={
+                modoDemo
+                  ? 'Modo demonstração ligado: a agenda inclui uma amostra ilustrativa marcada como "Exemplo". Nada dela entra em exportações.'
+                  : 'Modo demonstração desligado: a agenda mostra somente dados obtidos das fontes oficiais.'
+              }
+            >
+              <FlaskConical className="w-3.5 h-3.5" aria-hidden="true" />
+              <span>Exemplos: {modoDemo ? 'on' : 'off'}</span>
+            </button>
+
+            {/* Auto-atualização */}
+            <button
+              type="button"
               onClick={onToggleAutoUpdate}
-              className={`hidden lg:flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl text-xs font-medium border transition-colors ${
+              aria-pressed={autoUpdate}
+              className={`hidden lg:flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl text-xs font-medium border transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-600 ${
                 autoUpdate
                   ? 'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-300 dark:border-emerald-800'
                   : 'bg-slate-100 text-slate-500 border-slate-200 dark:bg-slate-800 dark:text-slate-400 dark:border-slate-700'
               }`}
-              title="Auto-atualização periódica a cada 30 minutos"
+              title={
+                autoUpdate
+                  ? 'Recarrega as fontes a cada 30 minutos, apenas enquanto esta aba estiver aberta.'
+                  : 'Auto-atualização desligada. A agenda só muda quando você clicar em Atualizar.'
+              }
             >
-              <span className={`w-2 h-2 rounded-full ${autoUpdate ? 'bg-emerald-500 animate-pulse' : 'bg-slate-400'}`} />
+              <span className={`w-2 h-2 rounded-full ${autoUpdate ? 'bg-emerald-500 animate-pulse' : 'bg-slate-400'}`} aria-hidden="true" />
               <span>Auto 30m</span>
             </button>
 
-            {/* Theme Toggle Button */}
             <button
+              type="button"
               onClick={onToggleTheme}
-              className="p-2 rounded-xl text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
-              aria-label="Alternar tema claro/escuro"
-              title={`Tema atual: ${theme}`}
+              className="p-2 rounded-xl text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-600"
+              aria-label={`Alterar tema (atual: ${theme === 'system' ? 'sistema' : theme === 'dark' ? 'escuro' : 'claro'})`}
+              title={`Tema atual: ${theme === 'system' ? 'sistema' : theme === 'dark' ? 'escuro' : 'claro'}`}
             >
               {theme === 'dark' ? (
-                <Sun className="w-4 h-4 text-amber-400" />
+                <Sun className="w-4 h-4 text-amber-400" aria-hidden="true" />
               ) : theme === 'light' ? (
-                <Moon className="w-4 h-4 text-slate-700" />
+                <Moon className="w-4 h-4 text-slate-700" aria-hidden="true" />
               ) : (
-                <Monitor className="w-4 h-4 text-slate-500" />
+                <Monitor className="w-4 h-4 text-slate-500" aria-hidden="true" />
               )}
             </button>
 
-            {/* Mobile Filter Trigger */}
             {onOpenMobileFilters && (
               <button
+                type="button"
                 onClick={onOpenMobileFilters}
                 className="lg:hidden p-2 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300"
-                aria-label="Abrir filtros"
+                aria-label="Abrir filtros da agenda"
               >
-                <SlidersHorizontal className="w-4 h-4" />
+                <SlidersHorizontal className="w-4 h-4" aria-hidden="true" />
               </button>
             )}
           </div>
         </div>
 
-        {/* Horizontal Navigation Tabs */}
-        <nav className="flex items-center gap-1 overflow-x-auto no-scrollbar py-2 -mx-4 px-4 sm:mx-0 sm:px-0 border-t border-slate-100 dark:border-slate-800/80">
+        {/* Navegação */}
+        <nav aria-label="Seções do aplicativo" className="flex items-center gap-1 overflow-x-auto no-scrollbar py-2 -mx-4 px-4 sm:mx-0 sm:px-0 border-t border-slate-100 dark:border-slate-800/80">
           {navItems.map((item) => {
             const isActive = currentTab === item.id;
             return (
               <button
                 key={item.id}
+                type="button"
                 onClick={() => onSelectTab(item.id)}
-                className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl text-xs font-semibold whitespace-nowrap transition-all ${
+                aria-current={isActive ? 'page' : undefined}
+                className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl text-xs font-semibold whitespace-nowrap transition-all focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-600 ${
                   isActive
                     ? 'bg-emerald-600 text-white shadow-sm shadow-emerald-600/20'
                     : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800'

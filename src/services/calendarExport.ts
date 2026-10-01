@@ -1,131 +1,269 @@
 import { Evento } from '../types';
+import { FUSO_BRASIL, estaEncerrado, hojeISO } from './datas';
+import { filtrarParaExportacao } from './eventos';
+import { resumir } from './texto';
+
+/**
+ * Exportação para calendário e planilha.
+ *
+ * Correções relevantes em relação à versão anterior:
+ *  - o `.ics` agora é conforme a RFC 5545: valores TEXT escapados
+ *    (`,` `;` `\` e quebra de linha), linhas dobradas em 75 octetos,
+ *    `DTSTART`/`DTEND` com `TZID=America/Sao_Paulo` + bloco `VTIMEZONE`
+ *    (antes eram horários "flutuantes", reinterpretados no fuso do
+ *    destinatário), CRLF e `STATUS` derivado do evento real (antes era
+ *    sempre `CONFIRMED`, inclusive para evento cancelado);
+ *  - o CSV cita TODOS os campos (antes só três), então um `;` ou `"` vindo
+ *    de uma fonte oficial não corrompe mais a linha;
+ *  - nenhuma exportação carrega dados de demonstração.
+ */
+
+/** Escapa um valor TEXT conforme RFC 5545 §3.3.11. */
+function escaparICS(valor: string): string {
+  return (valor || '')
+    .replace(/\\/g, '\\\\')
+    .replace(/;/g, '\\;')
+    .replace(/,/g, '\\,')
+    .replace(/\r\n|\r|\n/g, '\\n');
+}
+
+/**
+ * Dobra uma linha em 75 octetos (RFC 5545 §3.1).
+ * Conta bytes UTF-8, não caracteres, e nunca parte um caractere multibyte
+ * no meio — o que corromperia acentos em clientes estritos.
+ */
+function dobrarLinha(linha: string): string {
+  const bytes = new TextEncoder().encode(linha);
+  if (bytes.length <= 75) return linha;
+
+  const partes: string[] = [];
+  let atual = '';
+  let largura = 0;
+  const limite = 75;
+
+  for (const caractere of linha) {
+    const tamanho = new TextEncoder().encode(caractere).length;
+    // A partir da segunda linha o espaço de continuação já consome 1 octeto.
+    const disponivel = partes.length === 0 ? limite : limite - 1;
+    if (largura + tamanho > disponivel) {
+      partes.push(atual);
+      atual = caractere;
+      largura = tamanho;
+    } else {
+      atual += caractere;
+      largura += tamanho;
+    }
+  }
+  if (atual) partes.push(atual);
+
+  return partes.join('\r\n ');
+}
+
+/** Monta o bloco de propriedade já dobrado. */
+function propriedade(nome: string, valor: string): string {
+  return dobrarLinha(`${nome}:${valor}`);
+}
+
+/** 'HH:MM' -> 'HHMMSS'; assume 09:00 quando ausente. */
+function horaICS(hora?: string, padrao = '09:00'): string {
+  const base = (hora || padrao).trim();
+  const [h = '09', m = '00', s = '00'] = base.split(':');
+  return `${h.padStart(2, '0')}${m.padStart(2, '0')}${(s || '00').slice(0, 2).padStart(2, '0')}`;
+}
+
+/** '2026-09-30' -> '20260930' */
+function dataICS(iso: string): string {
+  return (iso || '').replace(/-/g, '');
+}
+
+/** Início e fim do evento no formato local (sem 'Z'). */
+function intervalo(evento: Evento): { inicio: string; fim: string } {
+  const dia = dataICS(evento.data);
+  const inicio = `${dia}T${horaICS(evento.hora)}`;
+
+  if (evento.hora_fim) {
+    return { inicio, fim: `${dia}T${horaICS(evento.hora_fim, '11:00')}` };
+  }
+  // Sem hora de término: 2 horas de duração, sem estourar a meia-noite.
+  const [h, m] = (evento.hora || '09:00').split(':').map(Number);
+  const totalMin = ((h || 9) * 60 + (m || 0) + 120) % (24 * 60);
+  const fimH = String(Math.floor(totalMin / 60)).padStart(2, '0');
+  const fimM = String(totalMin % 60).padStart(2, '0');
+  return { inicio, fim: `${dia}T${fimH}${fimM}00` };
+}
+
+/** Bloco de fuso. O Brasil não usa mais horário de verão desde 2019. */
+const VTIMEZONE = [
+  'BEGIN:VTIMEZONE',
+  `TZID:${FUSO_BRASIL}`,
+  `X-LIC-LOCATION:${FUSO_BRASIL}`,
+  'BEGIN:STANDARD',
+  'DTSTART:19700101T000000',
+  'TZOFFSETFROM:-0300',
+  'TZOFFSETTO:-0300',
+  'TZNAME:-03',
+  'END:STANDARD',
+  'END:VTIMEZONE'
+];
+
+function statusICS(evento: Evento): string {
+  if (evento.status === 'cancelado') return 'CANCELLED';
+  if (evento.status === 'adiado') return 'TENTATIVE';
+  // Não confirmamos o que o app não confirmou.
+  if (estaEncerrado(evento)) return 'CONFIRMED';
+  return 'CONFIRMED';
+}
+
+function descricaoEvento(evento: Evento): string {
+  const linhas = [
+    `Mecanismo: ${evento.mecanismo.replace(/_/g, ' ')}`,
+    `Casa: ${evento.casa_nome}`,
+    evento.comissao ? `Comissão: ${evento.comissao}` : '',
+    `Modalidade: ${evento.tipo_reuniao}`,
+    evento.prazo_contribuicao ? `Prazo para contribuições: ${evento.prazo_contribuicao}` : '',
+    evento.link_oficial ? `Página oficial: ${evento.link_oficial}` : '',
+    evento.inscricao ? `Inscrição: ${evento.inscricao}` : '',
+    evento.link_transmissao ? `Transmissão: ${evento.link_transmissao}` : '',
+    evento.proposicoes_relacionadas?.length
+      ? `Proposições: ${evento.proposicoes_relacionadas.join(', ')}`
+      : ''
+  ].filter(Boolean);
+
+  return linhas.join('\n');
+}
 
 export function gerarArquivoICS(evento: Evento): void {
-  // Format dates: 2025-07-15 and 14:00 -> 20250715T140000
-  const dateStr = evento.data.replace(/-/g, '');
-  const startTime = evento.hora ? evento.hora.replace(':', '') + '00' : '090000';
-  
-  let endTime = '110000';
-  if (evento.hora_fim) {
-    endTime = evento.hora_fim.replace(':', '') + '00';
-  } else if (evento.hora) {
-    // Default 2 hours duration
-    const [h, m] = evento.hora.split(':').map(Number);
-    const endH = Math.min(23, (h || 9) + 2);
-    endTime = `${String(endH).padStart(2, '0')}${String(m || 0).padStart(2, '0')}00`;
-  }
+  const { inicio, fim } = intervalo(evento);
+  const agora = new Date();
+  const carimbo =
+    `${dataICS(`${agora.getFullYear()}-${String(agora.getMonth() + 1).padStart(2, '0')}-${String(
+      agora.getDate()
+    ).padStart(2, '0')}`)}T${horaICS(
+      `${String(agora.getHours()).padStart(2, '0')}:${String(agora.getMinutes()).padStart(2, '0')}`
+    )}Z`;
 
-  const dtStart = `${dateStr}T${startTime}`;
-  const dtEnd = `${dateStr}T${endTime}`;
-  const now = new Date().toISOString().replace(/[-:]/g, '').split('.')[0] + 'Z';
-
-  const cleanDescription = [
-    `Mecanismo: ${evento.mecanismo.toUpperCase().replace(/_/g, ' ')}`,
-    `Casa: ${evento.casa} (${evento.casa_nome})`,
-    evento.comissao ? `Comissão: ${evento.comissao}` : '',
-    evento.tipo_reuniao ? `Modalidade: ${evento.tipo_reuniao}` : '',
-    `Link oficial: ${evento.link_oficial}`,
-    evento.link_transmissao ? `Transmissão: ${evento.link_transmissao}` : '',
-    evento.inscricao ? `Inscrição para fala: ${evento.inscricao}` : '',
-    evento.proposicoes_relacionadas?.length ? `Proposições: ${evento.proposicoes_relacionadas.join(', ')}` : ''
-  ].filter(Boolean).join('\\n');
-
-  const icsLines = [
+  const linhas = [
     'BEGIN:VCALENDAR',
     'VERSION:2.0',
-    'PRODID:-//LegisParticipa//Calendario Participacao Cidada//PT',
+    'PRODID:-//LegisParticipa//Agenda de Participacao Cidada//PT-BR',
     'CALSCALE:GREGORIAN',
     'METHOD:PUBLISH',
+    ...VTIMEZONE,
     'BEGIN:VEVENT',
-    `UID:${evento.id}@legisparticipa.org`,
-    `DTSTAMP:${now}`,
-    `DTSTART:${dtStart}`,
-    `DTEND:${dtEnd}`,
-    `SUMMARY:${evento.tema.replace(/\n/g, ' ')}`,
-    `DESCRIPTION:${cleanDescription}`,
-    `LOCATION:${(evento.local || evento.casa_nome).replace(/\n/g, ' ')}`,
-    `URL:${evento.link_oficial}`,
-    'STATUS:CONFIRMED',
+    // UID estável: depende só do id do evento, então reimportar atualiza em vez
+    // de duplicar. O id de eventos ao vivo deixou de embutir Date.now().
+    `UID:${escaparICS(evento.id)}@legisparticipa`,
+    `DTSTAMP:${carimbo}`,
+    `DTSTART;TZID=${FUSO_BRASIL}:${inicio}`,
+    `DTEND;TZID=${FUSO_BRASIL}:${fim}`,
+    propriedade('SUMMARY', escaparICS(evento.tema)),
+    propriedade('DESCRIPTION', escaparICS(descricaoEvento(evento))),
+    propriedade('LOCATION', escaparICS(evento.local || evento.casa_nome)),
+    evento.link_oficial ? propriedade('URL', escaparICS(evento.link_oficial)) : '',
+    `STATUS:${statusICS(evento)}`,
+    'TRANSP:OPAQUE',
     'END:VEVENT',
     'END:VCALENDAR'
-  ];
+  ].filter(Boolean);
 
-  const blob = new Blob([icsLines.join('\r\n')], { type: 'text/calendar;charset=utf-8' });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = `${evento.id}.ics`;
-  document.body.appendChild(a);
-  a.click();
-  document.body.removeChild(a);
-  URL.revokeObjectURL(url);
+  dispararDownload(
+    `${linhas.join('\r\n')}\r\n`,
+    'text/calendar;charset=utf-8',
+    `${evento.id}.ics`
+  );
 }
 
 export function abrirGoogleCalendar(evento: Evento): void {
-  const dateStr = evento.data.replace(/-/g, '');
-  const startTime = evento.hora ? evento.hora.replace(':', '') + '00' : '090000';
-  let endTime = '110000';
-  if (evento.hora_fim) {
-    endTime = evento.hora_fim.replace(':', '') + '00';
-  } else if (evento.hora) {
-    const [h, m] = evento.hora.split(':').map(Number);
-    const endH = Math.min(23, (h || 9) + 2);
-    endTime = `${String(endH).padStart(2, '0')}${String(m || 0).padStart(2, '0')}00`;
+  const { inicio, fim } = intervalo(evento);
+  const detalhes = [
+    `Mecanismo: ${evento.mecanismo.replace(/_/g, ' ')}`,
+    `Casa: ${evento.casa_nome}`,
+    evento.comissao ? `Comissão: ${evento.comissao}` : '',
+    evento.link_oficial ? `Página oficial: ${evento.link_oficial}` : ''
+  ]
+    .filter(Boolean)
+    .join('\n');
+
+  const params = new URLSearchParams({
+    action: 'TEMPLATE',
+    text: `[${evento.casa}] ${resumir(evento.tema, 120)}`,
+    dates: `${inicio}/${fim}`,
+    details: detalhes,
+    location: evento.local || evento.casa_nome,
+    // Sem `ctz` o Google cria o evento no fuso padrão de quem clica.
+    ctz: FUSO_BRASIL
+  });
+
+  const url = `https://calendar.google.com/calendar/render?${params.toString()}`;
+  const janela = window.open(url, '_blank', 'noopener,noreferrer');
+  if (!janela) {
+    // Pop-up bloqueado: degradar para cópia do endereço em vez de falhar em silêncio.
+    navigator.clipboard
+      ?.writeText(url)
+      .then(() => window.alert('O navegador bloqueou a janela. O link do Google Calendar foi copiado para a área de transferência.'))
+      .catch(() => window.alert('Não foi possível abrir o Google Calendar. Verifique o bloqueador de pop-ups.'));
   }
+}
 
-  const dates = `${dateStr}T${startTime}/${dateStr}T${endTime}`;
-  const title = encodeURIComponent(`[${evento.casa}] ${evento.tema}`);
-  const details = encodeURIComponent(
-    `Mecanismo: ${evento.mecanismo}\nCasa: ${evento.casa_nome}\nComissão: ${evento.comissao || 'N/A'}\nLink oficial: ${evento.link_oficial}\nTransmissão: ${evento.link_transmissao || 'Não informada'}`
-  );
-  const location = encodeURIComponent(evento.local || evento.casa_nome);
-
-  const url = `https://calendar.google.com/calendar/render?action=TEMPLATE&text=${title}&dates=${dates}&details=${details}&location=${location}`;
-  window.open(url, '_blank', 'noopener,noreferrer');
+/** Cita um campo de CSV, dobrando aspas internas. */
+function campoCSV(valor: unknown): string {
+  return `"${String(valor ?? '').replace(/"/g, '""')}"`;
 }
 
 export function exportarCSV(eventos: Evento[]): void {
-  const headers = [
-    'ID', 'Mecanismo', 'UF', 'Casa', 'Nivel', 'Data', 'Hora', 'Tema', 'Comissao', 'Tipo', 'Local', 'Link Oficial', 'Status'
+  const exportaveis = filtrarParaExportacao(eventos);
+
+  const cabecalho = [
+    'ID', 'Mecanismo', 'UF', 'Casa', 'Nivel', 'Data', 'Hora', 'Hora Fim', 'Tema',
+    'Comissao', 'Tipo', 'Local', 'Link Oficial', 'Status', 'Origem'
   ];
 
-  const rows = eventos.map(e => [
-    `"${e.id}"`,
-    `"${e.mecanismo}"`,
-    `"${e.uf}"`,
-    `"${e.casa}"`,
-    `"${e.nivel}"`,
-    `"${e.data}"`,
-    `"${e.hora}"`,
-    `"${(e.tema || '').replace(/"/g, '""')}"`,
-    `"${(e.comissao || '').replace(/"/g, '""')}"`,
-    `"${e.tipo_reuniao}"`,
-    `"${(e.local || '').replace(/"/g, '""')}"`,
-    `"${e.link_oficial}"`,
-    `"${e.status}"`
-  ]);
+  const linhas = exportaveis.map((e) =>
+    [
+      e.id, e.mecanismo, e.uf, e.casa, e.nivel, e.data, e.hora, e.hora_fim || '',
+      e.tema, e.comissao || '', e.tipo_reuniao, e.local || '', e.link_oficial || '',
+      e.status, e.origem
+    ].map(campoCSV).join(';')
+  );
 
-  const csvContent = '\uFEFF' + [headers.join(';'), ...rows.map(r => r.join(';'))].join('\r\n');
-  const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = `eventos-legislativo-participa-${new Date().toISOString().slice(0, 10)}.csv`;
-  document.body.appendChild(a);
-  a.click();
-  document.body.removeChild(a);
-  URL.revokeObjectURL(url);
+  // BOM para o Excel pt-BR reconhecer UTF-8; ';' como separador decimal regional.
+  const conteudo = `\uFEFF${[cabecalho.map(campoCSV).join(';'), ...linhas].join('\r\n')}\r\n`;
+  dispararDownload(conteudo, 'text/csv;charset=utf-8;', `legisparticipa-eventos-${hojeISO()}.csv`);
 }
 
 export function exportarJSON(eventos: Evento[]): void {
-  const jsonContent = JSON.stringify(eventos, null, 2);
-  const blob = new Blob([jsonContent], { type: 'application/json;charset=utf-8;' });
+  const exportaveis = filtrarParaExportacao(eventos);
+  const conteudo = JSON.stringify(
+    {
+      gerado_em: new Date().toISOString(),
+      fuso: FUSO_BRASIL,
+      // Sem rodeios: quem abrir o arquivo sabe o que está recebendo.
+      aviso:
+        'Somente eventos obtidos de fontes oficiais em tempo de execução. ' +
+        'Amostras ilustrativas do modo de demonstração são excluídas das exportações.',
+      total: exportaveis.length,
+      eventos: exportaveis
+    },
+    null,
+    2
+  );
+  dispararDownload(conteudo, 'application/json;charset=utf-8;', `legisparticipa-eventos-${hojeISO()}.json`);
+}
+
+/**
+ * Dispara o download e só revoga a object URL depois que o navegador teve
+ * chance de consumi-la. O código anterior revogava de forma síncrona logo
+ * após `click()`, a corrida conhecida que aborta downloads no Firefox/Safari.
+ */
+function dispararDownload(conteudo: string, tipo: string, nomeArquivo: string): void {
+  const blob = new Blob([conteudo], { type: tipo });
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;
-  a.download = `eventos-legislativo-participa-${new Date().toISOString().slice(0, 10)}.json`;
+  a.download = nomeArquivo;
+  a.rel = 'noopener';
   document.body.appendChild(a);
   a.click();
   document.body.removeChild(a);
-  URL.revokeObjectURL(url);
+  window.setTimeout(() => URL.revokeObjectURL(url), 2000);
 }

@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+# Ferramenta cidadã de transparência: a indexação é bem-vinda.

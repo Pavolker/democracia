@@ -1,4 +1,5 @@
 import { AlertaCidadao, Evento } from '../types';
+import { normalizar } from './texto';
 
 const STORAGE_KEYS = {
   FAVORITOS: 'legis_participa_favoritos',
@@ -6,139 +7,172 @@ const STORAGE_KEYS = {
   HISTORICO_BUSCAS: 'legis_participa_buscas',
   ALERTAS: 'legis_participa_alertas',
   CACHE_EVENTOS: 'legis_participa_cache_eventos',
+  CACHE_VERSAO: 'legis_participa_cache_versao',
   ULTIMA_ATUALIZACAO: 'legis_participa_ultima_atualizacao',
   TEMA: 'legis_participa_tema',
   AUTO_UPDATE: 'legis_participa_auto_update',
-};
+  MODO_DEMO: 'legis_participa_modo_demo'
+} as const;
+
+/**
+ * Versão do formato do cache.
+ *
+ * MOTIVO: caches gravados por versões antigas guardavam os 40 eventos
+ * ilustrativos SEM o campo `origem`. Como agora um evento sem
+ * `origem: 'demonstracao'` é tratado como dado real, um cache legado faria a
+ * amostra voltar a se passar por agenda oficial. Ao subir esta versão, o cache
+ * anterior é descartado e uma coleta nova é feita.
+ */
+const CACHE_VERSAO_ATUAL = 2;
+
+const MAX_VISUALIZADOS = 30;
+const MAX_BUSCAS = 15;
+
+function lerJSON<T>(chave: string, padrao: T): T {
+  try {
+    const bruto = localStorage.getItem(chave);
+    return bruto ? (JSON.parse(bruto) as T) : padrao;
+  } catch {
+    return padrao;
+  }
+}
+
+function gravarJSON(chave: string, valor: unknown): boolean {
+  try {
+    localStorage.setItem(chave, JSON.stringify(valor));
+    return true;
+  } catch (erro) {
+    console.warn(`Não foi possível gravar "${chave}" (cota do localStorage?):`, erro);
+    return false;
+  }
+}
 
 export const storage = {
-  // Favoritos
+  // ---------------------------------------------------------------- Favoritos
   getFavoritos(): string[] {
-    try {
-      const data = localStorage.getItem(STORAGE_KEYS.FAVORITOS);
-      return data ? JSON.parse(data) : [];
-    } catch {
-      return [];
-    }
+    const lista = lerJSON<string[]>(STORAGE_KEYS.FAVORITOS, []);
+    return Array.isArray(lista) ? lista : [];
   },
 
   toggleFavorito(id: string): boolean {
-    const favs = this.getFavoritos();
-    const index = favs.indexOf(id);
-    let novoEstado = false;
-    if (index > -1) {
-      favs.splice(index, 1);
-      novoEstado = false;
+    const favoritos = this.getFavoritos();
+    const indice = favoritos.indexOf(id);
+    const adicionado = indice === -1;
+    if (adicionado) {
+      favoritos.unshift(id);
     } else {
-      favs.unshift(id);
-      novoEstado = true;
+      favoritos.splice(indice, 1);
     }
-    try {
-      localStorage.setItem(STORAGE_KEYS.FAVORITOS, JSON.stringify(favs));
-    } catch (e) {
-      console.error('Erro ao salvar favorito:', e);
-    }
-    return novoEstado;
+    gravarJSON(STORAGE_KEYS.FAVORITOS, favoritos);
+    return adicionado;
   },
 
-  isFavorito(id: string): boolean {
-    return this.getFavoritos().includes(id);
-  },
-
-  // Visualizados recentemente
+  // ------------------------------------------------- Visualizados recentemente
   getVisualizados(): Evento[] {
+    const lista = lerJSON<Evento[]>(STORAGE_KEYS.HISTORICO_VISUALIZADOS, []);
+    return Array.isArray(lista) ? lista : [];
+  },
+
+  addVisualizado(evento: Evento): void {
+    const lista = this.getVisualizados().filter((e) => e.id !== evento.id);
+    lista.unshift(evento);
+    gravarJSON(STORAGE_KEYS.HISTORICO_VISUALIZADOS, lista.slice(0, MAX_VISUALIZADOS));
+  },
+
+  clearVisualizados(): void {
     try {
-      const data = localStorage.getItem(STORAGE_KEYS.HISTORICO_VISUALIZADOS);
-      return data ? JSON.parse(data) : [];
+      localStorage.removeItem(STORAGE_KEYS.HISTORICO_VISUALIZADOS);
     } catch {
-      return [];
+      /* ignora */
     }
   },
 
-  addVisualizado(evento: Evento) {
-    try {
-      const list = this.getVisualizados().filter(e => e.id !== evento.id);
-      list.unshift(evento);
-      // Keep last 30
-      const trimmed = list.slice(0, 30);
-      localStorage.setItem(STORAGE_KEYS.HISTORICO_VISUALIZADOS, JSON.stringify(trimmed));
-    } catch (e) {
-      console.error('Erro ao salvar visualização:', e);
-    }
-  },
+  limiteVisualizados: MAX_VISUALIZADOS,
 
-  // Histórico de Buscas
+  // ------------------------------------------------------ Histórico de buscas
   getBuscas(): string[] {
-    try {
-      const data = localStorage.getItem(STORAGE_KEYS.HISTORICO_BUSCAS);
-      return data ? JSON.parse(data) : [];
-    } catch {
-      return [];
-    }
+    const lista = lerJSON<string[]>(STORAGE_KEYS.HISTORICO_BUSCAS, []);
+    return Array.isArray(lista) ? lista : [];
   },
 
-  addBusca(termo: string) {
-    if (!termo || termo.trim().length < 2) return;
-    const clean = termo.trim();
-    const buscas = this.getBuscas().filter(b => b.toLowerCase() !== clean.toLowerCase());
-    buscas.unshift(clean);
-    try {
-      localStorage.setItem(STORAGE_KEYS.HISTORICO_BUSCAS, JSON.stringify(buscas.slice(0, 15)));
-    } catch (e) {
-      console.error('Erro ao salvar busca:', e);
-    }
+  /**
+   * Registra um termo de busca.
+   *
+   * Antes cada mudança em `filtros.busca` era gravada, então digitar
+   * "audiencia" devagar gerava ["audiencia","audienci","audienc","audien",...]
+   * e consumia o histórico inteiro. Agora termos que são prefixo de um termo
+   * já conhecido (ou que o contêm) são substituídos pelo mais completo, e
+   * duplicatas normalizadas são descartadas.
+   */
+  addBusca(termo: string): void {
+    const limpo = (termo || '').trim();
+    if (limpo.length < 3) return;
+
+    const chaveNova = normalizar(limpo);
+    const existentes = this.getBuscas();
+    const filtrados = existentes.filter((b) => {
+      const chave = normalizar(b);
+      if (chave === chaveNova) return false;
+      // Descarta prefixos parciais do termo novo e vice-versa.
+      if (chaveNova.startsWith(chave) || chave.startsWith(chaveNova)) return false;
+      return true;
+    });
+
+    const atualizados = [limpo, ...filtrados].slice(0, MAX_BUSCAS);
+    gravarJSON(STORAGE_KEYS.HISTORICO_BUSCAS, atualizados);
   },
 
-  clearBuscas() {
+  removeBusca(termo: string): void {
+    const chave = normalizar(termo);
+    gravarJSON(
+      STORAGE_KEYS.HISTORICO_BUSCAS,
+      this.getBuscas().filter((b) => normalizar(b) !== chave)
+    );
+  },
+
+  clearBuscas(): void {
     try {
       localStorage.removeItem(STORAGE_KEYS.HISTORICO_BUSCAS);
-    } catch {}
-  },
-
-  // Alertas
-  getAlertas(): AlertaCidadao[] {
-    try {
-      const data = localStorage.getItem(STORAGE_KEYS.ALERTAS);
-      if (data) return JSON.parse(data);
-      // Default initial alert example
-      const defaultAlerts: AlertaCidadao[] = [
-        {
-          id: 'alerta-default-1',
-          tema: 'Reforma Tributária',
-          uf: 'TODAS',
-          mecanismo: 'audiencia_publica',
-          ativo: true,
-          data_criacao: new Date().toISOString()
-        },
-        {
-          id: 'alerta-default-2',
-          tema: 'Educação',
-          uf: 'TODAS',
-          mecanismo: 'todos',
-          ativo: true,
-          data_criacao: new Date().toISOString()
-        }
-      ];
-      this.saveAlertas(defaultAlerts);
-      return defaultAlerts;
     } catch {
-      return [];
+      /* ignora */
     }
   },
 
-  saveAlertas(alertas: AlertaCidadao[]) {
-    try {
-      localStorage.setItem(STORAGE_KEYS.ALERTAS, JSON.stringify(alertas));
-    } catch (e) {
-      console.error('Erro ao salvar alertas:', e);
-    }
+  // ------------------------------------------------------------------ Alertas
+  /**
+   * Alertas salvos.
+   * A versão anterior criava e persistia DOIS alertas fictícios
+   * ("Reforma Tributária", "Educação") que o usuário nunca pediu, inflando o
+   * badge do cabeçalho. Agora a lista começa vazia, de verdade.
+   */
+  getAlertas(): AlertaCidadao[] {
+    const lista = lerJSON<AlertaCidadao[]>(STORAGE_KEYS.ALERTAS, []);
+    return Array.isArray(lista) ? lista : [];
   },
 
-  addAlerta(alerta: Omit<AlertaCidadao, 'id' | 'data_criacao'>): AlertaCidadao {
+  saveAlertas(alertas: AlertaCidadao[]): void {
+    gravarJSON(STORAGE_KEYS.ALERTAS, alertas);
+  },
+
+  addAlerta(
+    alerta: Omit<AlertaCidadao, 'id' | 'data_criacao'>
+  ): AlertaCidadao | { erro: string } {
     const alertas = this.getAlertas();
+    const tema = alerta.tema.trim();
+    const duplicado = alertas.some(
+      (a) =>
+        normalizar(a.tema) === normalizar(tema) &&
+        a.uf === alerta.uf &&
+        (a.mecanismo || 'todos') === (alerta.mecanismo || 'todos')
+    );
+    if (duplicado) {
+      return { erro: 'Já existe um filtro salvo com este tema, esta UF e este mecanismo.' };
+    }
+
     const novo: AlertaCidadao = {
       ...alerta,
-      id: 'alerta-' + Date.now() + '-' + Math.random().toString(36).substring(2, 7),
+      tema,
+      id: `alerta-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
       data_criacao: new Date().toISOString()
     };
     alertas.unshift(novo);
@@ -146,38 +180,63 @@ export const storage = {
     return novo;
   },
 
-  removeAlerta(id: string) {
-    const alertas = this.getAlertas().filter(a => a.id !== id);
-    this.saveAlertas(alertas);
+  removeAlerta(id: string): void {
+    this.saveAlertas(this.getAlertas().filter((a) => a.id !== id));
   },
 
   toggleAlertaAtivo(id: string): boolean {
     const alertas = this.getAlertas();
-    const target = alertas.find(a => a.id === id);
-    if (target) {
-      target.ativo = !target.ativo;
-      this.saveAlertas(alertas);
-      return target.ativo;
-    }
-    return false;
+    const alvo = alertas.find((a) => a.id === id);
+    if (!alvo) return false;
+    alvo.ativo = !alvo.ativo;
+    this.saveAlertas(alertas);
+    return alvo.ativo;
   },
 
-  // Cache de Eventos
+  // ------------------------------------------------------------ Cache da agenda
+  /**
+   * Cache de eventos, descartado quando o formato muda.
+   * Um cache de versão anterior (sem `origem`) é ignorado de propósito:
+   * ver comentário em CACHE_VERSAO_ATUAL.
+   */
   getCachedEventos(): Evento[] | null {
     try {
-      const data = localStorage.getItem(STORAGE_KEYS.CACHE_EVENTOS);
-      return data ? JSON.parse(data) : null;
+      const versao = Number(localStorage.getItem(STORAGE_KEYS.CACHE_VERSAO) || '0');
+      if (versao !== CACHE_VERSAO_ATUAL) return null;
+
+      const lista = lerJSON<Evento[] | null>(STORAGE_KEYS.CACHE_EVENTOS, null);
+      if (!Array.isArray(lista) || lista.length === 0) return null;
+      // Qualquer registro sem `origem` é de um formato antigo e não é confiável.
+      if (lista.some((e) => e?.origem !== 'ao_vivo' && e?.origem !== 'demonstracao')) {
+        return null;
+      }
+      return lista;
     } catch {
       return null;
     }
   },
 
-  setCachedEventos(eventos: Evento[]) {
+  /** Grava o cache. Devolve false quando a cota estoura. */
+  setCachedEventos(eventos: Evento[]): boolean {
+    const ok = gravarJSON(STORAGE_KEYS.CACHE_EVENTOS, eventos);
+    if (ok) {
+      try {
+        localStorage.setItem(STORAGE_KEYS.CACHE_VERSAO, String(CACHE_VERSAO_ATUAL));
+        localStorage.setItem(STORAGE_KEYS.ULTIMA_ATUALIZACAO, new Date().toISOString());
+      } catch {
+        /* ignora */
+      }
+    }
+    return ok;
+  },
+
+  limparCache(): void {
     try {
-      localStorage.setItem(STORAGE_KEYS.CACHE_EVENTOS, JSON.stringify(eventos));
-      localStorage.setItem(STORAGE_KEYS.ULTIMA_ATUALIZACAO, new Date().toISOString());
-    } catch (e) {
-      console.warn('Não foi possível armazenar cache completo no localStorage (tamanho):', e);
+      localStorage.removeItem(STORAGE_KEYS.CACHE_EVENTOS);
+      localStorage.removeItem(STORAGE_KEYS.CACHE_VERSAO);
+      localStorage.removeItem(STORAGE_KEYS.ULTIMA_ATUALIZACAO);
+    } catch {
+      /* ignora */
     }
   },
 
@@ -189,34 +248,38 @@ export const storage = {
     }
   },
 
-  // Tema
+  // --------------------------------------------------------------------- Tema
   getTema(): 'dark' | 'light' | 'system' {
-    try {
-      return (localStorage.getItem(STORAGE_KEYS.TEMA) as any) || 'system';
-    } catch {
-      return 'system';
-    }
+    const valor = lerJSON<'dark' | 'light' | 'system' | null>(STORAGE_KEYS.TEMA, null);
+    return valor === 'dark' || valor === 'light' || valor === 'system' ? valor : 'system';
   },
 
-  setTema(tema: 'dark' | 'light' | 'system') {
-    try {
-      localStorage.setItem(STORAGE_KEYS.TEMA, tema);
-    } catch {}
+  setTema(tema: 'dark' | 'light' | 'system'): void {
+    gravarJSON(STORAGE_KEYS.TEMA, tema);
   },
 
-  // Auto update
+  // --------------------------------------------------- Atualização automática
   getAutoUpdate(): boolean {
-    try {
-      const val = localStorage.getItem(STORAGE_KEYS.AUTO_UPDATE);
-      return val !== null ? JSON.parse(val) : true;
-    } catch {
-      return true;
-    }
+    return lerJSON<boolean>(STORAGE_KEYS.AUTO_UPDATE, true);
   },
 
-  setAutoUpdate(enabled: boolean) {
-    try {
-      localStorage.setItem(STORAGE_KEYS.AUTO_UPDATE, JSON.stringify(enabled));
-    } catch {}
+  setAutoUpdate(ativo: boolean): void {
+    gravarJSON(STORAGE_KEYS.AUTO_UPDATE, ativo);
+  },
+
+  // ------------------------------------------------------- Modo demonstração
+  /**
+   * DESLIGADO por padrão.
+   * Ligado, acrescenta a amostra ilustrativa mantida no código — sempre
+   * marcada com selo "Exemplo" na tela e sempre excluída das exportações.
+   */
+  getModoDemo(): boolean {
+    return lerJSON<boolean>(STORAGE_KEYS.MODO_DEMO, false);
+  },
+
+  setModoDemo(ativo: boolean): void {
+    gravarJSON(STORAGE_KEYS.MODO_DEMO, ativo);
   }
 };
+
+export { STORAGE_KEYS, CACHE_VERSAO_ATUAL };

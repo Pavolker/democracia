@@ -1,27 +1,33 @@
 {
   "compilerOptions": {
     "target": "ES2022",
-    "experimentalDecorators": true,
-    "useDefineForClassFields": false,
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
     "module": "ESNext",
-    "types": ["vite/client"],
-    "lib": [
-      "ES2022",
-      "DOM",
-      "DOM.Iterable"
-    ],
-    "skipLibCheck": true,
     "moduleResolution": "bundler",
-    "isolatedModules": true,
     "moduleDetection": "force",
-    "allowJs": true,
     "jsx": "react-jsx",
-    "paths": {
-      "@/*": [
-        "./*"
-      ]
-    },
+    "types": ["vite/client", "node"],
+
+    /* O projeto não tinha `strict`, então `any` circulava livre e vários bugs
+       (status não lido, união de retorno ignorada) passavam batido pelo tsc. */
+    "strict": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "noFallthroughCasesInSwitch": true,
+    "noImplicitOverride": true,
+    "forceConsistentCasingInFileNames": true,
+
+    "skipLibCheck": true,
+    "isolatedModules": true,
     "allowImportingTsExtensions": true,
-    "noEmit": true
-  }
+    "noEmit": true,
+    "useDefineForClassFields": false,
+    "experimentalDecorators": true,
+    "allowJs": true,
+    "paths": {
+      "@/*": ["./*"]
+    }
+  },
+  "include": ["src", "shared", "netlify/functions", "vite.config.ts"],
+  "exclude": ["node_modules", "dist"]
 }

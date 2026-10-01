@@ -1,15 +1,29 @@
-export type MecanismoParticipacao = 
-  | 'audiencia_publica'
-  | 'consulta_publica'
-  | 'sugestao_legislativa'
-  | 'dialogo_social_plenaria'
-  | 'ordem_dia_tribuna_livre';
+/**
+ * O tipo do mecanismo é definido em `shared/mecanismos.ts` porque a função
+ * serverless precisa da MESMA definição: um adaptador que devolvesse um valor
+ * fora desta união tem que falhar na compilação, não em produção.
+ */
+import type { MecanismoParticipacao } from '../../shared/mecanismos';
+export type { MecanismoParticipacao };
 
-export type NivelLegislativo = 'federal' | 'estadual' | 'municipal';
+/**
+ * Níveis de casa legislativa.
+ * `distrital` cobre a CLDF (Câmara Legislativa do Distrito Federal), que não é
+ * nem estadual nem municipal.
+ */
+export type NivelLegislativo = 'federal' | 'estadual' | 'distrital' | 'municipal';
 
 export type TipoReuniao = 'presencial' | 'virtual' | 'hibrida';
 
-export type StatusEvento = 'confirmado' | 'cancelado' | 'adiado';
+export type StatusEvento = 'confirmado' | 'cancelado' | 'adiado' | 'encerrado';
+
+/**
+ * Procedência do registro. Todo evento exibido precisa declarar de onde veio:
+ * - `ao_vivo`: obtido de uma fonte oficial em tempo de execução;
+ * - `demonstracao`: amostra ilustrativa mantida no código-fonte, NUNCA
+ *   apresentada como dado oficial e sempre excluída das exportações.
+ */
+export type OrigemEvento = 'ao_vivo' | 'demonstracao';
 
 export interface Evento {
   id: string;
@@ -19,7 +33,7 @@ export interface Evento {
   casa_nome: string;
   nivel: NivelLegislativo;
   local: string;
-  data: string; // YYYY-MM-DD
+  data: string; // YYYY-MM-DD (horário local de Brasília)
   hora: string; // HH:MM
   hora_fim?: string;
   tema: string;
@@ -33,6 +47,7 @@ export interface Evento {
   status: StatusEvento;
   data_extracao: string;
   fonte: string;
+  origem: OrigemEvento;
   isNew?: boolean;
 }
 
@@ -54,6 +69,8 @@ export interface FiltrosState {
   busca: string;
   casa?: string;
   nivel?: string;
+  /** 'proximos' esconde eventos já encerrados; 'todos' inclui o histórico. */
+  situacao?: 'proximos' | 'todos';
 }
 
 export interface FonteConfig {
@@ -65,6 +82,12 @@ export interface FonteConfig {
   tipo: 'api' | 'html' | 'rss';
   ativo: boolean;
   descricao?: string;
+  /**
+   * `integrada`: o app realmente consulta esta fonte.
+   * `pendente`: fonte catalogada, mas a coleta ainda não foi implementada.
+   * Nunca marcar como integrada uma fonte que não é consultada.
+   */
+  integracao: 'integrada' | 'pendente';
 }
 
 export interface ScraperStatus {

@@ -2,29 +2,62 @@
   command = "npm run build"
   publish = "dist"
 
-# SPA Fallback for client-side routing
+# ────────────────────────────────────────────────────────────────────────────
+# Funções serverless
+#
+# POR QUE ELAS EXISTEM: nenhum portal das assembleias legislativas publica
+# cabeçalho CORS, então o navegador não consegue lê-los. O servidor não tem essa
+# restrição. É a única razão de haver backend neste projeto.
+#
+# Em desenvolvimento, o `@netlify/vite-plugin` (registrado em vite.config.ts)
+# emula as funções dentro do próprio `npm run dev` — não é preciso usar o CLI.
+# ────────────────────────────────────────────────────────────────────────────
+[functions]
+  directory = "netlify/functions"
+  node_bundler = "esbuild"
+
+# ────────────────────────────────────────────────────────────────────────────
+# Redirecionamentos — A ORDEM IMPORTA
+#
+# A regra da API vem PRIMEIRO e de propósito: o catch-all do SPA logo abaixo
+# engoliria `/api/*` e o app receberia HTML onde espera JSON.
+#
+# O arquivo `public/_redirects` foi removido: manter um catch-all em dois lugares
+# tornava impossível garantir qual regra vencia.
+# ────────────────────────────────────────────────────────────────────────────
+[[redirects]]
+  from = "/api/agenda-estados"
+  to = "/.netlify/functions/agenda-estados"
+  status = 200
+
+# Fallback do SPA, para o app abrir mesmo em um caminho desconhecido.
 [[redirects]]
   from = "/*"
   to = "/index.html"
   status = 200
 
-# Cache control for Service Worker (ensure instant updates)
+# Cache do service worker: sempre revalidar, para uma nova versão chegar logo.
 [[headers]]
   for = "/sw.js"
   [headers.values]
     Cache-Control = "no-cache, no-store, must-revalidate"
 
-# Manifest content type
 [[headers]]
   for = "/manifest.json"
   [headers.values]
     Content-Type = "application/manifest+json"
     Cache-Control = "public, max-age=0, must-revalidate"
 
-# Security Headers
+# Ícones são imutáveis na prática; longo cache evita rebaixá-los a cada deploy.
+[[headers]]
+  for = "/icon-*.png"
+  [headers.values]
+    Cache-Control = "public, max-age=31536000, immutable"
+
 [[headers]]
   for = "/*"
   [headers.values]
     X-Frame-Options = "DENY"
     X-Content-Type-Options = "nosniff"
     Referrer-Policy = "strict-origin-when-cross-origin"
+    Permissions-Policy = "geolocation=(), camera=(), microphone=()"
