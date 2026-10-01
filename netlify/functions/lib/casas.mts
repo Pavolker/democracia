@@ -351,8 +351,14 @@ function adaptadorPernambuco(): Adaptador {
       const eventos: EventoBruto[] = [];
       const vistos = new Set<string>();
 
-      // Mês corrente e os dois seguintes.
-      for (let avanco = 0; avanco <= 2; avanco++) {
+      // Mês anterior, corrente e seguinte.
+      //
+      // O mês ANTERIOR é necessário, não é gordura: a virada de mês zera a
+      // agenda desta casa (em 01/10 não há audiência em outubro nem novembro),
+      // e sem olhar para trás o app diria "sem eventos" logo depois de ter
+      // havido audiências. Cada mês é um POST lento — a casa não serve a agenda
+      // em GET —, então esta é a janela que cabe no orçamento de tempo.
+      for (let avanco = -1; avanco <= 1; avanco++) {
         const referencia = new Date(hoje.getFullYear(), hoje.getMonth() + avanco, 1);
         const mes = referencia.getMonth() + 1;
         const ano = referencia.getFullYear();
@@ -442,8 +448,9 @@ function adaptadorRioGrandeDoSul(): Adaptador {
       const eventos: EventoBruto[] = [];
       const vistos = new Set<string>();
 
-      // Fatias de 60 dias: a API limita a resposta a 100 itens.
-      for (let deslocamento = -30; deslocamento <= 90; deslocamento += 60) {
+      // Fatias de 60 dias: a API limita a resposta a 100 itens. Duas fatias
+      // cobrem de 30 dias atrás a 90 à frente.
+      for (let deslocamento = -30; deslocamento <= 30; deslocamento += 60) {
         const inicio = somaDiasISO(deslocamento);
         const fim = somaDiasISO(deslocamento + 59);
         const paraBr = (iso: string) => iso.split('-').reverse().join('/');
@@ -686,9 +693,12 @@ function adaptadorDistritoFederal(): Adaptador {
       'Exportação CSV do próprio portal, com coluna oficial de tipo de evento. O filtro de tipo da URL é aproximado, então o tipo é conferido novamente aqui. A conexão com esta casa é lenta.',
     tetoMs: 35_000,
     executar: async ({ buscarTexto: buscar }: ContextoExecucao) => {
+      // Duas tentativas curtas em vez de uma longa: da região padrão da função
+      // (EUA) a conexão com esta casa é lenta e instável, e uma tentativa única
+      // que estoura consome todo o orçamento sem chance de recuperação.
       const resposta = await buscar(montarUrl(somaDiasISO(-15), somaDiasISO(105)), {
-        timeoutMs: 33_000,
-        tentativas: 1,
+        timeoutMs: 15_000,
+        tentativas: 2,
         limiteBytes: 2 * 1024 * 1024
       });
 
@@ -931,7 +941,10 @@ function adaptadorMatoGrossoDoSul(): Adaptador {
     executar: async ({ buscarTexto: buscar }: ContextoExecucao) => {
       const hoje = new Date();
       const alvos: Array<{ mes: number; ano: number }> = [];
-      for (let avanco = 0; avanco <= 2; avanco++) {
+      // Do mês anterior até dois à frente: o anterior preserva a agenda recente
+      // na virada de mês; as páginas desta casa são rápidas, então a janela
+      // maior não custa tempo.
+      for (let avanco = -1; avanco <= 2; avanco++) {
         const ref = new Date(hoje.getFullYear(), hoje.getMonth() + avanco, 1);
         alvos.push({ mes: ref.getMonth() + 1, ano: ref.getFullYear() });
       }

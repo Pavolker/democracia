@@ -35,12 +35,20 @@ const CONCORRENCIA = 16;
 
 /**
  * Teto de tempo por casa, aplicado AQUI e não apenas dentro de cada adaptador.
- * Motivo: o limite síncrono da função é de 60 s. Se vários portais ficarem
- * lentos ao mesmo tempo, sem este teto a função inteira seria morta pela
- * plataforma e o app receberia um erro genérico em vez de 11 estados — sendo
- * que 10 deles teriam respondido bem.
+ *
+ * Dois limites definem este número:
+ *  - o limite síncrono da plataforma é de 60 s, e sem teto a função inteira
+ *    seria morta, entregando um erro genérico em vez dos estados das casas que
+ *    responderam bem;
+ *  - a função roda por padrão em Ohio (EUA), e a conexão até os portais
+ *    brasileiros é muito mais lenta de lá do que de uma máquina no Brasil — a
+ *    CLDF levou 10,5 s em produção contra 0,7 s local. O teto precisa acomodar
+ *    essa diferença, senão casas saudáveis aparecem como falha.
+ *
+ * As casas com coleta implementada rodam em paralelo, então o tempo total da
+ * função é o da mais lenta, não a soma.
  */
-const TETO_POR_CASA_MS = 22_000;
+const TETO_POR_CASA_MS = 35_000;
 
 /** TTL do cache em memória do contêiner (chamadas repetidas do mesmo usuário). */
 const TTL_CACHE_MS = 10 * 60 * 1000;
