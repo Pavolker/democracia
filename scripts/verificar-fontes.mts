@@ -32,6 +32,9 @@ async function comTimeout<T>(promessa: Promise<T>, ms: number, rotulo: string): 
   const limite = new Promise<never>((_, rejeitar) => {
     timer = setTimeout(() => rejeitar(new Error(`excedeu ${ms / 1000}s`)), ms);
   });
+  // Sem este catch, a promessa perdedora rejeita sem tratador quando o tempo
+  // esgota, e o Node encerra o processo do script.
+  promessa.catch(() => undefined);
   try {
     return await Promise.race([promessa, limite]);
   } finally {

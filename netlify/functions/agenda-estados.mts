@@ -3,6 +3,7 @@ import { FUSO_BRASIL } from '../../shared/datas.ts';
 import type { RespostaAgenda, ResultadoCasa } from '../../shared/coleta.ts';
 import { buscarTexto } from './lib/http.mts';
 import type { Adaptador } from './lib/adaptadores.mts';
+import { comTeto } from './lib/tempo.mts';
 import { montarRegistro } from './lib/registro.mts';
 
 /**
@@ -54,15 +55,6 @@ const TETO_POR_CASA_MS = 35_000;
 const TTL_CACHE_MS = 10 * 60 * 1000;
 
 const cache = new Map<string, { expira: number; resultado: ResultadoCasa[] }>();
-
-/** Rejeita se a promessa não resolver dentro do prazo. */
-function comTeto<T>(promessa: Promise<T>, ms: number): Promise<T> {
-  let temporizador: ReturnType<typeof setTimeout>;
-  const limite = new Promise<never>((_, rejeitar) => {
-    temporizador = setTimeout(() => rejeitar(new Error(`tempo esgotado após ${ms / 1000}s`)), ms);
-  });
-  return Promise.race([promessa, limite]).finally(() => clearTimeout(temporizador));
-}
 
 /** Executa `tarefas` com no máximo `limite` em paralelo, preservando a ordem. */
 async function emParalelo<T>(tarefas: Array<() => Promise<T>>, limite: number): Promise<T[]> {
@@ -126,6 +118,39 @@ async function executarAdaptador(adaptador: Adaptador): Promise<ResultadoCasa> {
 }
 
 export default async (req: Request, _contexto: Context): Promise<Response> => {
+  try {
+    return await tratarRequisicao(req);
+  } catch (erro) {
+    // Uma falha inesperada aqui virava "502 - An unknown error has occurred",
+    // que não diz nada a quem precisa consertar. Agora a resposta carrega o
+    // motivo, e o app mostra a coleta das assembleias como indisponível com
+    // essa informação em vez de um erro genérico.
+    const motivo = erro instanceof Error ? `${erro.name}: ${erro.message}` : String(erro);
+    const pilha = erro instanceof Error ? (erro.stack || '').split('\n').slice(0, 4).join(' | ') : '';
+    console.error('[agenda-estados] falha inesperada:', motivo, pilha);
+
+    return new Response(
+      JSON.stringify({
+        gerado_em: new Date().toISOString(),
+        fuso: FUSO_BRASIL,
+        fonte: '/.netlify/functions/agenda-estados',
+        casasIntegradas: 0,
+        totalCasas: 0,
+        eventos: 0,
+        casas: [],
+        erro: 'falha inesperada na coleta',
+        motivo,
+        pilha
+      }),
+      {
+        status: 500,
+        headers: { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' }
+      }
+    );
+  }
+};
+
+async function tratarRequisicao(req: Request): Promise<Response> {
   const url = new URL(req.url);
   const pedidas = (url.searchParams.get('ufs') || '')
     .split(',')
@@ -169,9 +194,12 @@ export default async (req: Request, _contexto: Context): Promise<Response> => {
       'Content-Type': 'application/json; charset=utf-8',
       // O CDN pode servir a mesma resposta por 10 minutos; o corpo é idêntico
       // para todos os usuários, então isso não vaza dado de ninguém.
+      // `stale-while-revalidate` curto de propósito: com 30 min, uma correção
+      // publicada podia levar meia hora para aparecer, e a agenda podia ser
+      // servida bem mais velha do que o rótulo "última consulta" sugere.
       'Cache-Control': usarCache
-        ? 'public, max-age=600, stale-while-revalidate=1800'
-        : 'public, max-age=300, stale-while-revalidate=1800',
+        ? 'public, max-age=600, stale-while-revalidate=120'
+        : 'public, max-age=180, stale-while-revalidate=120',
       'Access-Control-Allow-Origin': '*',
       'X-Casas-Integradas': `${integradas}/${casas.length}`
     }

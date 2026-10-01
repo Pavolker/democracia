@@ -351,14 +351,23 @@ function adaptadorPernambuco(): Adaptador {
       const eventos: EventoBruto[] = [];
       const vistos = new Set<string>();
 
-      // Mês anterior, corrente e seguinte.
+      // Orçamento de tempo, não número fixo de meses.
       //
-      // O mês ANTERIOR é necessário, não é gordura: a virada de mês zera a
-      // agenda desta casa (em 01/10 não há audiência em outubro nem novembro),
-      // e sem olhar para trás o app diria "sem eventos" logo depois de ter
-      // havido audiências. Cada mês é um POST lento — a casa não serve a agenda
-      // em GET —, então esta é a janela que cabe no orçamento de tempo.
-      for (let avanco = -1; avanco <= 1; avanco++) {
+      // Esta casa não serve a agenda em GET: cada mês é um POST lento (medido em
+      // ~7 s daqui e até ~20 s de dentro da função, que roda nos EUA). Buscar
+      // três meses sempre estouraria o teto e a casa apareceria como falha.
+      // Então a ordem é por RELEVÂNCIA — mês corrente, o seguinte, e só então o
+      // anterior — e a coleta para quando o orçamento acaba.
+      //
+      // O mês anterior existe porque a virada de mês zera esta agenda (em
+      // 01/10 não há audiência em outubro nem novembro) e, sem olhar para trás,
+      // o app diria "sem eventos" logo depois de ter havido audiências.
+      const ORCAMENTO_MS = 20_000;
+      const inicioColeta = Date.now();
+      const mesesAlvo = [0, 1, -1];
+
+      for (const avanco of mesesAlvo) {
+        if (avanco === -1 && Date.now() - inicioColeta > ORCAMENTO_MS) break;
         const referencia = new Date(hoje.getFullYear(), hoje.getMonth() + avanco, 1);
         const mes = referencia.getMonth() + 1;
         const ano = referencia.getFullYear();

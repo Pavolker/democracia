@@ -29,6 +29,7 @@ import {
   montarEventoBruto
 } from '../netlify/functions/lib/adaptadores.mts';
 import { linhasDeTabela, elementosPorClasse, urlAbsoluta } from '../netlify/functions/lib/html.mts';
+import { comTeto } from '../netlify/functions/lib/tempo.mts';
 
 // ─────────────────────────────────────────────── classificação de mecanismo
 
@@ -331,3 +332,16 @@ test('lista na raiz do JSON é aceita (caminho vazio)', async () => {
   assert.equal(eventos[0].data, '2026-10-13');
   assert.equal(eventos[0].hora, '14:30');
 });
+
+// ───────────────────────────────────────── teto de tempo
+
+test('comTeto devolve o valor quando a promessa resolve a tempo', async () => {
+  const valor = await comTeto(Promise.resolve('ok'), 200);
+  assert.equal(valor, 'ok');
+});
+
+test('comTeto rejeita com mensagem clara quando o tempo esgota', async () => {
+  const lenta = new Promise((resolve) => setTimeout(() => resolve('tarde demais'), 300));
+  await assert.rejects(() => comTeto(lenta, 20), /tempo esgotado/);
+});
+
