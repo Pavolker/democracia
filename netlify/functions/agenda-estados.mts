@@ -54,6 +54,17 @@ const CONCORRENCIA = 16;
  */
 const TETO_POR_CASA_MS = 12_000;
 
+/**
+ * Teto absoluto por casa, aplicado como trava.
+ *
+ * Como todas as casas rodam em paralelo, o tempo da invocação é o da mais lenta:
+ * um adaptador com teto alto derruba a coleta INTEIRA por timeout da plataforma,
+ * inclusive as casas que já tinham respondido. Esta trava garante que nenhum
+ * adaptador, atual ou futuro, consiga empurrar a invocação para além do que a
+ * plataforma tolera.
+ */
+const TETO_MAXIMO_POR_CASA_MS = 20_000;
+
 /** TTL do cache em memória do contêiner (chamadas repetidas do mesmo usuário). */
 const TTL_CACHE_MS = 10 * 60 * 1000;
 
@@ -98,7 +109,7 @@ async function executarAdaptador(adaptador: Adaptador): Promise<ResultadoCasa> {
   try {
     const eventos = await comTeto(
       adaptador.executar({ buscarTexto }),
-      adaptador.tetoMs ?? TETO_POR_CASA_MS
+      Math.min(adaptador.tetoMs ?? TETO_POR_CASA_MS, TETO_MAXIMO_POR_CASA_MS)
     );
     return {
       ...base,

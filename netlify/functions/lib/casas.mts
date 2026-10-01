@@ -346,6 +346,9 @@ function adaptadorPernambuco(): Adaptador {
     situacao: 'verificado',
     observacao:
       'Agenda entregue por POST de formulário (não existe em GET), com rótulo de tipo explícito. A listagem não é cacheável nem linkável por GET.',
+    // Cada POST desta casa leva mais de 12 s a partir da região padrão da função,
+    // então ela recebe um teto próprio — o padrão é pensado para o conjunto.
+    tetoMs: 20_000,
     executar: async ({ buscarTexto: buscar }: ContextoExecucao) => {
       const hoje = new Date();
       const eventos: EventoBruto[] = [];
@@ -452,6 +455,9 @@ function adaptadorRioGrandeDoSul(): Adaptador {
     sigla: 'ALRS',
     nome: 'Assembleia Legislativa do Rio Grande do Sul',
     situacao: 'verificado',
+    // Uma única requisição, mas a conexão até esta casa (porta não padrão) é
+    // lenta a partir da região padrão da função, então ela recebe teto próprio.
+    tetoMs: 20_000,
     observacao:
       'API JSON sem documentação, em porta não padrão, descoberta no JavaScript do portal. O campo `descTipoEvento` identifica a audiência e evita ingerir eventos culturais e visitas.',
     executar: async ({ buscarTexto: buscar }: ContextoExecucao) => {
@@ -705,7 +711,7 @@ function adaptadorDistritoFederal(): Adaptador {
     situacao: 'verificado',
     observacao:
       'Exportação CSV do próprio portal, com coluna oficial de tipo de evento. O filtro de tipo da URL é aproximado, então o tipo é conferido novamente aqui. A conexão com esta casa é lenta.',
-    tetoMs: 35_000,
+    tetoMs: 14_000,
     executar: async ({ buscarTexto: buscar }: ContextoExecucao) => {
       // Duas tentativas curtas em vez de uma longa: da região padrão da função
       // (EUA) a conexão com esta casa é lenta e instável, e uma tentativa única
