@@ -362,12 +362,13 @@ function adaptadorPernambuco(): Adaptador {
       // O mês anterior existe porque a virada de mês zera esta agenda (em
       // 01/10 não há audiência em outubro nem novembro) e, sem olhar para trás,
       // o app diria "sem eventos" logo depois de ter havido audiências.
-      const ORCAMENTO_MS = 20_000;
+      const ORCAMENTO_MS = 9_000;
       const inicioColeta = Date.now();
       const mesesAlvo = [0, 1, -1];
 
       for (const avanco of mesesAlvo) {
-        if (avanco === -1 && Date.now() - inicioColeta > ORCAMENTO_MS) break;
+        // Só o primeiro mês é obrigatório; os demais entram se houver tempo.
+        if (Date.now() - inicioColeta > ORCAMENTO_MS) break;
         const referencia = new Date(hoje.getFullYear(), hoje.getMonth() + avanco, 1);
         const mes = referencia.getMonth() + 1;
         const ano = referencia.getFullYear();
@@ -457,9 +458,13 @@ function adaptadorRioGrandeDoSul(): Adaptador {
       const eventos: EventoBruto[] = [];
       const vistos = new Set<string>();
 
-      // Fatias de 60 dias: a API limita a resposta a 100 itens. Duas fatias
-      // cobrem de 30 dias atrás a 90 à frente.
-      for (let deslocamento = -30; deslocamento <= 30; deslocamento += 60) {
+      // UMA fatia de 60 dias (35 atrás, 24 à frente). A API limita a resposta a
+      // 100 itens e a conexão a partir da função é lenta; mais de uma fatia
+      // estourava o teto de tempo e a casa aparecia como falha em produção.
+      // O começo da janela olha para trás de propósito: esta casa publica
+      // audiência com pouca antecedência, então só olhar para a frente a deixa
+      // permanentemente vazia.
+      for (const deslocamento of [-35]) {
         const inicio = somaDiasISO(deslocamento);
         const fim = somaDiasISO(deslocamento + 59);
         const paraBr = (iso: string) => iso.split('-').reverse().join('/');

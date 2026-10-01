@@ -37,19 +37,22 @@ const CONCORRENCIA = 16;
 /**
  * Teto de tempo por casa, aplicado AQUI e não apenas dentro de cada adaptador.
  *
- * Dois limites definem este número:
- *  - o limite síncrono da plataforma é de 60 s, e sem teto a função inteira
- *    seria morta, entregando um erro genérico em vez dos estados das casas que
- *    responderam bem;
- *  - a função roda por padrão em Ohio (EUA), e a conexão até os portais
- *    brasileiros é muito mais lenta de lá do que de uma máquina no Brasil — a
- *    CLDF levou 10,5 s em produção contra 0,7 s local. O teto precisa acomodar
- *    essa diferença, senão casas saudáveis aparecem como falha.
+ * O número vem de medição, não de estimativa. As casas rodam TODAS em paralelo
+ * (a concorrência é maior que o número de casas), então o tempo total da
+ * invocação é o da casa mais lenta — baixar este teto baixa o tempo total.
  *
- * As casas com coleta implementada rodam em paralelo, então o tempo total da
- * função é o da mais lenta, não a soma.
+ * Em produção a plataforma cortou a invocação com HTTP 504 ("Inactivity
+ * Timeout") antes de o código conseguir responder, e nenhum tratamento de erro
+ * interno chega a rodar nesse caso: a resposta tem que sair, não ser tratada.
+ * Com teto de 35 s isso acontecia de forma intermitente; com 12 s a invocação
+ * cabe com folga.
+ *
+ * A causa de fundo é geográfica: a função roda por padrão em Ohio (EUA) e a
+ * conexão até os portais brasileiros é muito mais lenta de lá — a CLDF levou
+ * 10,5 s em produção contra 0,7 s local. A correção definitiva é mudar a região
+ * da função para São Paulo (gru), que é ajuste de painel e não de código.
  */
-const TETO_POR_CASA_MS = 35_000;
+const TETO_POR_CASA_MS = 12_000;
 
 /** TTL do cache em memória do contêiner (chamadas repetidas do mesmo usuário). */
 const TTL_CACHE_MS = 10 * 60 * 1000;
