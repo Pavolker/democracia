@@ -752,9 +752,14 @@ export default function App() {
             <p>
               {(() => {
                 // Cobertura declarada a partir do que foi REALMENTE consultado
-                // nesta sessão — não de uma promessa fixa no rodapé. Quando os
-                // adaptadores das assembleias forem entrando, este número sobe
-                // sozinho; enquanto não houver nenhum, a frase diz isso.
+                // nesta sessão — não de uma promessa fixa no rodapé.
+                //
+                // Enquanto a consulta está em andamento a frase NÃO arrisca um
+                // número: dizer "as demais não foram mapeadas" no meio da coleta
+                // seria falso para as casas que estão sendo consultadas naquele
+                // instante.
+                if (isUpdating) return 'Consultando as fontes oficiais…';
+
                 const federais = ['camara', 'senado'];
                 const consultadas = statuses.filter(
                   (s) => s.status === 'sucesso' || s.status === 'erro'
@@ -763,28 +768,18 @@ export default function App() {
                 const estaduaisOk = consultadas.filter(
                   (s) => !federais.includes(s.fonteId) && s.uf !== 'FEDERAL'
                 ).length;
-                const estaduaisTotal = statuses.filter((s) => !federais.includes(s.fonteId)).length;
+                if (estaduaisOk === 0 && federaisOk === 0) return 'Consultando as fontes oficiais…';
 
-                if (estaduaisTotal === 0) {
-                  return 'Consultando as fontes oficiais…';
-                }
                 return (
                   <>
                     Consultadas nesta sessão:{' '}
                     <strong className="text-slate-700 dark:text-slate-300">
-                      {federaisOk} de 2 fontes federais (Câmara e Senado)
-                      {estaduaisOk > 0
-                        ? ` e ${estaduaisOk} de ${estaduaisTotal} casas estaduais`
-                        : ''}
+                      {federaisOk} de 2 fontes federais (Câmara e Senado) e {estaduaisOk} de 27 casas
+                      estaduais e distrital
                     </strong>
-                    .
-                    {estaduaisOk < estaduaisTotal && (
-                      <>
-                        {' '}
-                        As demais casas estaduais e distrital estão catalogadas, mas a agenda do portal
-                        delas ainda não foi mapeada — nenhuma requisição é feita a elas.
-                      </>
-                    )}
+                    . As demais não entram na coleta por um de dois motivos — o portal foi verificado e não
+                    publica audiências públicas, ou a integração ainda não foi feita. O painel{' '}
+                    <em>Fontes &amp; Cobertura</em> mostra o motivo de cada uma.
                   </>
                 );
               })()}
@@ -795,6 +790,13 @@ export default function App() {
               acesso direto ao navegador.
             </p>
           </div>
+        </div>
+
+        {/* Créditos e versão */}
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 mt-6 pt-4 border-t border-slate-200 dark:border-slate-800">
+          <p className="text-[11px] text-slate-500 dark:text-slate-400 text-center sm:text-left">
+            (C) Copyright 2026 - MDH - Desenvolvido por Pvolker. Versão 1.0
+          </p>
         </div>
       </footer>
     </div>
