@@ -122,11 +122,19 @@ async function executarAdaptador(adaptador: Adaptador): Promise<ResultadoCasa> {
           : 'Portal consultado; nenhum evento com mecanismo de participação foi encontrado no período'
     };
   } catch (erro) {
+    const motivo = erro instanceof Error ? erro.message : 'erro desconhecido';
+    // Tempo esgotado tem causa conhecida e correção conhecida; a mensagem diz
+    // as duas, em vez de só registrar a falha.
+    const dica = motivo.includes('tempo esgotado')
+      ? ' Este portal é lento a partir da região atual da função (EUA, padrão da plataforma);' +
+        ' mover a função para a região de São Paulo resolve.'
+      : '';
+
     return {
       ...base,
       status: 'erro',
       tempoMs: Date.now() - inicio,
-      mensagem: `Falha ao consultar o portal: ${erro instanceof Error ? erro.message : 'erro desconhecido'}`
+      mensagem: `Falha ao consultar o portal: ${motivo}.${dica}`
     };
   }
 }

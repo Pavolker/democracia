@@ -713,12 +713,13 @@ function adaptadorDistritoFederal(): Adaptador {
       'Exportação CSV do próprio portal, com coluna oficial de tipo de evento. O filtro de tipo da URL é aproximado, então o tipo é conferido novamente aqui. A conexão com esta casa é lenta.',
     tetoMs: 14_000,
     executar: async ({ buscarTexto: buscar }: ContextoExecucao) => {
-      // Duas tentativas curtas em vez de uma longa: da região padrão da função
-      // (EUA) a conexão com esta casa é lenta e instável, e uma tentativa única
-      // que estoura consome todo o orçamento sem chance de recuperação.
+      // O timeout da requisição precisa CABER no teto externo da casa: com duas
+      // tentativas de 15 s dentro de um teto de 14 s, a primeira tentativa
+      // consumia o teto inteiro e o adaptador nunca chegava a concluir. Uma
+      // tentativa de 12 s dentro de 14 s deixa margem para o parse.
       const resposta = await buscar(montarUrl(somaDiasISO(-15), somaDiasISO(105)), {
-        timeoutMs: 15_000,
-        tentativas: 2,
+        timeoutMs: 12_000,
+        tentativas: 1,
         limiteBytes: 2 * 1024 * 1024
       });
 
