@@ -18,12 +18,10 @@ export type TipoReuniao = 'presencial' | 'virtual' | 'hibrida';
 export type StatusEvento = 'confirmado' | 'cancelado' | 'adiado' | 'encerrado';
 
 /**
- * Procedência do registro. Todo evento exibido precisa declarar de onde veio:
- * - `ao_vivo`: obtido de uma fonte oficial em tempo de execução;
- * - `demonstracao`: amostra ilustrativa mantida no código-fonte, NUNCA
- *   apresentada como dado oficial e sempre excluída das exportações.
+ * Procedência do registro:
+ * - `ao_vivo`: obtido exclusivamente de fonte oficial em tempo de execução.
  */
-export type OrigemEvento = 'ao_vivo' | 'demonstracao';
+export type OrigemEvento = 'ao_vivo';
 
 export interface Evento {
   id: string;

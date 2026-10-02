@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { Evento, MecanismoParticipacao } from '../types';
 import { MECANISMOS_INFO, UFS_BRASIL } from '../services/config';
 import { compararPorDataHora } from '../services/datas';
-import { casasDisponiveis, chaveUF, ehDemonstracao } from '../services/eventos';
+import { casasDisponiveis, chaveUF } from '../services/eventos';
 import { eventoCorrespondeBusca, normalizar } from '../services/texto';
 import { EventCard } from './EventCard';
 import { BarChart2, GitCompare, Sparkles } from 'lucide-react';
@@ -31,16 +31,6 @@ const PASSO = 30;
 
 const ID_PAUTA = 'comparador-pauta-livre';
 const ID_MECANISMO = 'comparador-mecanismo';
-
-/** Selo usado em qualquer linha de evento de demonstração. */
-const BadgeExemplo: React.FC = () => (
-  <span
-    title="Evento de demonstração: amostra ilustrativa mantida no app, não é dado oficial."
-    className="inline-flex items-center text-[10px] font-bold px-1.5 py-0.5 rounded-md bg-amber-100 text-amber-800 border border-amber-300 dark:bg-amber-950/40 dark:text-amber-300 dark:border-amber-800"
-  >
-    Exemplo
-  </span>
-);
 
 /** Nome legível da localidade de agrupamento ('FEDERAL' não é uma UF). */
 function nomeLocalidade(chave: string): string {
@@ -100,7 +90,6 @@ export const ComparisonView: React.FC<ComparisonViewProps> = ({
   const totalCorrespondentes = eventosFiltrados.length;
   const exibidos = gruposVisiveis.reduce((soma, g) => soma + g.eventos.length, 0);
   const restam = totalCorrespondentes - exibidos;
-  const totalDemonstracao = eventosFiltrados.filter(ehDemonstracao).length;
 
   const selecionarTema = (tema: string) => {
     setSelectedTema(tema);
@@ -230,13 +219,6 @@ export const ComparisonView: React.FC<ComparisonViewProps> = ({
           </div>
         </div>
 
-        {totalDemonstracao > 0 && (
-          <p className="text-[11px] text-amber-700 dark:text-amber-300 bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-900/60 rounded-xl px-3 py-2">
-            A base comparada inclui {totalDemonstracao} evento(s) de demonstração, marcados com o selo
-            &quot;Exemplo&quot;: são amostras ilustrativas mantidas no app e não dados oficiais.
-          </p>
-        )}
-
         {restam > 0 && (
           <p className="text-[11px] text-slate-500 dark:text-slate-400">
             Exibindo {exibidos} de {totalCorrespondentes} evento(s) correspondentes; use
@@ -301,16 +283,14 @@ export const ComparisonView: React.FC<ComparisonViewProps> = ({
 
                 <div className="space-y-3">
                   {eventos.map((evento) => (
-                    <div key={evento.id} className="space-y-1.5">
-                      {ehDemonstracao(evento) && <BadgeExemplo />}
-                      <EventCard
-                        evento={evento}
-                        isFavorito={favoritoIds.includes(evento.id)}
-                        onToggleFavorito={onToggleFavorito}
-                        onOpenDetalhes={onOpenDetalhes}
-                        onShare={onShare}
-                      />
-                    </div>
+                    <EventCard
+                      key={evento.id}
+                      evento={evento}
+                      isFavorito={favoritoIds.includes(evento.id)}
+                      onToggleFavorito={onToggleFavorito}
+                      onOpenDetalhes={onOpenDetalhes}
+                      onShare={onShare}
+                    />
                   ))}
                 </div>
               </div>

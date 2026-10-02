@@ -105,7 +105,6 @@ Observações técnicas aprendidas na integração (documentadas para não se re
 - 🔖 **Filtros salvos**: guarde temas de interesse e veja o que casa com eles.
   *Não é um serviço de notificação* — a conferência roda só enquanto a aba está aberta. O app não envia e-mail nem push.
 - 📆 **Exportação**: `.ics` conforme RFC 5545 (com `TZID` e `VTIMEZONE`), Google Calendar, CSV e JSON.
-- 🧪 **Modo demonstração** (desligado por padrão): amostra ilustrativa para exercitar a interface, sempre com selo **Exemplo** e **sempre fora das exportações**.
 - 🛠️ **Painel de cobertura das fontes**: o que é coletado, o que falhou e o que ainda não foi implementado.
 - 🌓 Tema claro, escuro e sistema. 📱 PWA instalável, com funcionamento offline do app shell.
 
@@ -116,7 +115,7 @@ Observações técnicas aprendidas na integração (documentadas para não se re
 - Tudo roda no navegador; nenhum dado pessoal é enviado a servidores de terceiros.
 - Favoritos, histórico e filtros salvos ficam apenas em `localStorage`.
 - Nada de `dangerouslySetInnerHTML`; todo conteúdo de fonte externa é renderizado como texto.
-- **Dados de demonstração nunca saem do app**: `filtrarParaExportacao()` remove qualquer registro com `origem: 'demonstracao'` antes de gerar CSV, JSON ou `.ics`.
+- **100% dos dados são oficiais**: sem registros ilustrativos, simulados ou inventados.
 - O cache tem versionamento (`CACHE_VERSAO_ATUAL`): um cache de formato antigo é descartado em vez de ser lido com regras novas.
 
 ---

@@ -4,39 +4,16 @@ import { eventoCorrespondeBusca, normalizar } from './texto';
 import { estaEncerrado, hojeISO, mesAtualISO, somaDiasISO } from './datas';
 
 /**
- * Regras de domínio dos eventos, extraídas de App.tsx.
- *
- * Motivo: o app misturava três coisas diferentes no mesmo componente
- * (procedência do dado, filtragem e agregação), o que tornava impossível
- * garantir que uma exportação não levasse dados de demonstração junto.
- * Aqui tudo é função pura e testável.
+ * Regras de domínio dos eventos: filtragem, contagem e exportação.
+ * Funções puras e testáveis.
  */
 
-/** Todo evento de demonstração carrega a marca `origem: 'demonstracao'`. */
-export function ehDemonstracao(evento: Evento): boolean {
-  return evento.origem === 'demonstracao';
-}
-
-/** Eventos exibidos: os reais, mais os de demonstração apenas quando ligados. */
-export function separarPorOrigem(eventos: Evento[]): {
-  reais: Evento[];
-  demonstracao: Evento[];
-} {
-  const reais: Evento[] = [];
-  const demonstracao: Evento[] = [];
-  for (const e of eventos) {
-    (ehDemonstracao(e) ? demonstracao : reais).push(e);
-  }
-  return { reais, demonstracao };
-}
 
 /**
- * Dados liberados para exportação (CSV/JSON/ICS).
- * Amostras de demonstração NUNCA saem daqui: uma planilha baixada não tem
- * como carregar o selo "Exemplo" que a tela carrega.
+ * Dados liberados para exportação (CSV/JSON/ICS) — todos oficiais.
  */
 export function filtrarParaExportacao(eventos: Evento[]): Evento[] {
-  return eventos.filter((e) => !ehDemonstracao(e));
+  return eventos;
 }
 
 /** Chave de agregação por localidade: o Congresso não é o Distrito Federal. */

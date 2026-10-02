@@ -10,20 +10,14 @@ const STORAGE_KEYS = {
   CACHE_VERSAO: 'legis_participa_cache_versao',
   ULTIMA_ATUALIZACAO: 'legis_participa_ultima_atualizacao',
   TEMA: 'legis_participa_tema',
-  AUTO_UPDATE: 'legis_participa_auto_update',
-  MODO_DEMO: 'legis_participa_modo_demo'
+  AUTO_UPDATE: 'legis_participa_auto_update'
 } as const;
 
 /**
  * Versão do formato do cache.
- *
- * MOTIVO: caches gravados por versões antigas guardavam os 40 eventos
- * ilustrativos SEM o campo `origem`. Como agora um evento sem
- * `origem: 'demonstracao'` é tratado como dado real, um cache legado faria a
- * amostra voltar a se passar por agenda oficial. Ao subir esta versão, o cache
- * anterior é descartado e uma coleta nova é feita.
+ * Bump para v3 descarta caches antigos garantindo 100% de dados oficiais.
  */
-const CACHE_VERSAO_ATUAL = 2;
+const CACHE_VERSAO_ATUAL = 3;
 
 const MAX_VISUALIZADOS = 30;
 const MAX_BUSCAS = 15;
@@ -206,8 +200,8 @@ export const storage = {
 
       const lista = lerJSON<Evento[] | null>(STORAGE_KEYS.CACHE_EVENTOS, null);
       if (!Array.isArray(lista) || lista.length === 0) return null;
-      // Qualquer registro sem `origem` é de um formato antigo e não é confiável.
-      if (lista.some((e) => e?.origem !== 'ao_vivo' && e?.origem !== 'demonstracao')) {
+      // Garante que todo registro em cache veio exclusivamente de fontes oficiais ao vivo
+      if (lista.some((e) => e?.origem !== 'ao_vivo')) {
         return null;
       }
       return lista;
@@ -265,20 +259,6 @@ export const storage = {
 
   setAutoUpdate(ativo: boolean): void {
     gravarJSON(STORAGE_KEYS.AUTO_UPDATE, ativo);
-  },
-
-  // ------------------------------------------------------- Modo demonstração
-  /**
-   * DESLIGADO por padrão.
-   * Ligado, acrescenta a amostra ilustrativa mantida no código — sempre
-   * marcada com selo "Exemplo" na tela e sempre excluída das exportações.
-   */
-  getModoDemo(): boolean {
-    return lerJSON<boolean>(STORAGE_KEYS.MODO_DEMO, false);
-  },
-
-  setModoDemo(ativo: boolean): void {
-    gravarJSON(STORAGE_KEYS.MODO_DEMO, ativo);
   }
 };
 

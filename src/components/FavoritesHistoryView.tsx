@@ -4,7 +4,7 @@ import { Evento } from '../types';
 import { EventCard } from './EventCard';
 import { storage } from '../services/storage';
 import { formatarDataCurta } from '../services/datas';
-import { chaveUF, ehDemonstracao } from '../services/eventos';
+import { chaveUF } from '../services/eventos';
 import { Star, Clock, Trash2, Search, ArrowRight } from 'lucide-react';
 
 interface FavoritesHistoryViewProps {
@@ -22,16 +22,6 @@ const ORDEM_ABAS: SubTab[] = ['favoritos', 'visualizados', 'buscas'];
 
 /** Limite aplicado por `storage.addVisualizado` no armazenamento local. */
 const LIMITE_VISUALIZADOS = 30;
-
-/** Selo usado em qualquer linha de evento de demonstração. */
-const BadgeExemplo: React.FC = () => (
-  <span
-    title="Evento de demonstração: amostra ilustrativa mantida no app, não é dado oficial."
-    className="inline-flex items-center text-[10px] font-bold px-1.5 py-0.5 rounded-md bg-amber-100 text-amber-800 border border-amber-300 dark:bg-amber-950/40 dark:text-amber-300 dark:border-amber-800"
-  >
-    Exemplo
-  </span>
-);
 
 export const FavoritesHistoryView: React.FC<FavoritesHistoryViewProps> = ({
   todosEventos,
@@ -207,16 +197,14 @@ export const FavoritesHistoryView: React.FC<FavoritesHistoryViewProps> = ({
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
               {favoritos.map((evento) => (
-                <div key={evento.id} className="space-y-1.5">
-                  {ehDemonstracao(evento) && <BadgeExemplo />}
-                  <EventCard
-                    evento={evento}
-                    isFavorito={true}
-                    onToggleFavorito={onToggleFavorito}
-                    onOpenDetalhes={abrirDetalhes}
-                    onShare={onShare}
-                  />
-                </div>
+                <EventCard
+                  key={evento.id}
+                  evento={evento}
+                  isFavorito={true}
+                  onToggleFavorito={onToggleFavorito}
+                  onOpenDetalhes={abrirDetalhes}
+                  onShare={onShare}
+                />
               ))}
             </div>
           )}
@@ -276,7 +264,6 @@ export const FavoritesHistoryView: React.FC<FavoritesHistoryViewProps> = ({
                       <span>
                         {formatarDataCurta(evento.data)} às {evento.hora}
                       </span>
-                      {ehDemonstracao(evento) && <BadgeExemplo />}
                     </div>
                     <h5 className="font-semibold text-slate-900 dark:text-white text-sm line-clamp-1 group-hover:text-emerald-600 dark:group-hover:text-emerald-400">
                       {evento.tema}

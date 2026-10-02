@@ -9,7 +9,7 @@ import {
   hojeISO,
   rotuloStatus
 } from '../services/datas';
-import { chaveUF, ehDemonstracao, eventoCorrespondeAlerta } from '../services/eventos';
+import { chaveUF, eventoCorrespondeAlerta } from '../services/eventos';
 import { normalizar } from '../services/texto';
 import { Bell, BellOff, CheckCircle2, Plus, Trash2 } from 'lucide-react';
 
@@ -35,16 +35,6 @@ function rotuloMecanismo(mecanismo: MecanismoParticipacao | 'todos' | undefined)
   if (!mecanismo || mecanismo === 'todos') return 'todos os mecanismos';
   return MECANISMOS_INFO[mecanismo]?.nome ?? mecanismo;
 }
-
-/** Selo usado em qualquer linha de evento de demonstração. */
-const BadgeExemplo: React.FC = () => (
-  <span
-    title="Evento de demonstração: amostra ilustrativa mantida no app, não é dado oficial."
-    className="inline-flex items-center text-[10px] font-bold px-1.5 py-0.5 rounded-md bg-amber-100 text-amber-800 border border-amber-300 dark:bg-amber-950/40 dark:text-amber-300 dark:border-amber-800"
-  >
-    Exemplo
-  </span>
-);
 
 export const AlertsManager: React.FC<AlertsManagerProps> = ({
   alertas,
@@ -482,20 +472,17 @@ export const AlertsManager: React.FC<AlertsManagerProps> = ({
                             <p className="font-semibold text-slate-800 dark:text-slate-200 line-clamp-1">
                               {m.tema}
                             </p>
-                            {(status.texto !== 'Confirmado' || ehDemonstracao(m)) && (
+                            {status.texto !== 'Confirmado' && (
                               <div className="flex flex-wrap items-center gap-1.5 mt-1">
-                                {status.texto !== 'Confirmado' && (
-                                  <span
-                                    className={`text-[10px] font-bold px-1.5 py-0.5 rounded-md ${
-                                      status.tom === 'alerta'
-                                        ? 'bg-red-100 text-red-700 dark:bg-red-950/40 dark:text-red-300'
-                                        : 'bg-slate-200 text-slate-600 dark:bg-slate-700 dark:text-slate-300'
-                                    }`}
-                                  >
-                                    {status.texto}
-                                  </span>
-                                )}
-                                {ehDemonstracao(m) && <BadgeExemplo />}
+                                <span
+                                  className={`text-[10px] font-bold px-1.5 py-0.5 rounded-md ${
+                                    status.tom === 'alerta'
+                                      ? 'bg-red-100 text-red-700 dark:bg-red-950/40 dark:text-red-300'
+                                      : 'bg-slate-200 text-slate-600 dark:bg-slate-700 dark:text-slate-300'
+                                  }`}
+                                >
+                                  {status.texto}
+                                </span>
                               </div>
                             )}
                           </button>

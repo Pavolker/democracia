@@ -18,7 +18,6 @@ import {
   Send,
   Info,
   CalendarCheck,
-  FlaskConical,
   Ban,
   AlertTriangle
 } from 'lucide-react';
@@ -196,12 +195,6 @@ export const EventModal: React.FC<EventModalProps> = ({
                 ) : null}
                 {status.texto}
               </span>
-
-              {evento.origem === 'demonstracao' && (
-                <span className="inline-flex items-center gap-1 text-xs px-2.5 py-1 rounded-full font-semibold bg-amber-500 text-white">
-                  <FlaskConical className="w-3 h-3" aria-hidden="true" /> Exemplo
-                </span>
-              )}
             </div>
 
             <h2
@@ -246,20 +239,6 @@ export const EventModal: React.FC<EventModalProps> = ({
               <p className="text-sm text-amber-900 dark:text-amber-200">
                 A fonte oficial informa este evento como <strong>adiado ou não realizado</strong>. Confirme a nova
                 data no portal da casa antes de se deslocar.
-              </p>
-            </div>
-          )}
-
-          {evento.origem === 'demonstracao' && (
-            <div
-              role="note"
-              className="flex items-start gap-3 p-4 bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-900/50 rounded-2xl"
-            >
-              <FlaskConical className="w-5 h-5 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" aria-hidden="true" />
-              <p className="text-xs text-amber-900 dark:text-amber-200">
-                <strong>Registro de demonstração.</strong> Este evento foi escrito no código para exercitar a
-                interface. Não é dado oficial, as datas são relativas a hoje e os links podem não existir. Ele não
-                entra em nenhuma exportação.
               </p>
             </div>
           )}
@@ -452,15 +431,15 @@ export const EventModal: React.FC<EventModalProps> = ({
             </div>
           )}
 
-          {/* Procedência, sem expor ID interno como se fosse oficial */}
+          {/* Procedência */}
           <div className="text-[11px] text-slate-500 dark:text-slate-400 flex flex-wrap items-center justify-between gap-2 pt-3 border-t border-slate-100 dark:border-slate-800">
             <span>
               Procedência:{' '}
               <strong className="text-slate-700 dark:text-slate-300">
-                {evento.origem === 'demonstracao' ? 'amostra ilustrativa (não oficial)' : 'fonte oficial'}
+                fonte oficial
               </strong>
             </span>
-            {evento.origem !== 'demonstracao' && evento.fonte && (
+            {evento.fonte && (
               <span className="truncate">Consultado em {dominio(evento.fonte)}</span>
             )}
           </div>

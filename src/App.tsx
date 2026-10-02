@@ -3,7 +3,7 @@ import { Evento, FiltrosState, ScraperStatus, AlertaCidadao } from './types';
 import { MECANISMOS_INFO } from './services/config';
 import { buscarTodosEventos } from './services/scraper';
 import { storage } from './services/storage';
-import { casasDisponiveis, contarPorUF, filtrarEventos, filtrosIniciais, separarPorOrigem } from './services/eventos';
+import { casasDisponiveis, contarPorUF, filtrarEventos, filtrosIniciais } from './services/eventos';
 import { estaEncerrado } from './services/datas';
 import { escreverEstadoURL, lerEstadoURL, ehAbaValida } from './services/url';
 import { Header, TabType, ResumoSincronizacao } from './components/Header';
@@ -17,7 +17,7 @@ import { FavoritesHistoryView } from './components/FavoritesHistoryView';
 import { AlertsManager } from './components/AlertsManager';
 import { SourceTester } from './components/SourceTester';
 import { ComparisonView } from './components/ComparisonView';
-import { Search, ChevronDown, FlaskConical, Info, ExternalLink } from 'lucide-react';
+import { Search, ChevronDown, Info, ExternalLink } from 'lucide-react';
 
 const ITEMS_POR_PAGINA = 50;
 const INTERVALO_AUTO_MS = 30 * 60 * 1000;
@@ -63,7 +63,6 @@ export default function App() {
   const [alertas, setAlertas] = useState<AlertaCidadao[]>(() => storage.getAlertas());
   const [theme, setTheme] = useState<'dark' | 'light' | 'system'>(() => storage.getTema());
   const [autoUpdate, setAutoUpdate] = useState<boolean>(() => storage.getAutoUpdate());
-  const [modoDemo, setModoDemo] = useState<boolean>(() => storage.getModoDemo());
 
   const [filtros, setFiltros] = useState<FiltrosState>(inicial.filtros);
 
@@ -145,15 +144,8 @@ export default function App() {
     );
   }, []);
 
-  // Ref para o modo demonstração: `sincronizarDados` é memoizado, então sem
-  // isto o botão que liga o modo chamava a sincronização com o valor ANTIGO
-  // (false) e a amostra nunca aparecia.
-  const modoDemoRef = useRef(modoDemo);
-  modoDemoRef.current = modoDemo;
-
-  const sincronizarDados = useCallback(
-    async (incluirDemonstracaoParam?: boolean) => {
-      const incluirDemonstracao = incluirDemonstracaoParam ?? modoDemoRef.current;
+const sincronizarDados = useCallback(
+    async () => {
       setIsUpdating(true);
       setAvisoCota(null);
       idsAnterioresRef.current = new Set(eventos.map((e) => e.id));
@@ -162,8 +154,7 @@ export default function App() {
       const acumulados: ScraperStatus[] = [];
       try {
         const resultado = await buscarTodosEventos({
-          incluirDemonstracao,
-          onStatusUpdate: (status) => {
+onStatusUpdate: (status) => {
             setStatuses((anteriores) => {
               const idx = anteriores.findIndex((s) => s.fonteId === status.fonteId);
               if (idx === -1) return [...anteriores, status];
@@ -206,7 +197,7 @@ export default function App() {
 
         setUltimaAtualizacao(new Date().toISOString());
 
-        const oficiais = separarPorOrigem(resultado.eventos).reais.length;
+        const oficiais = resultado.eventos.length;
         showToast(
           erro > 0
             ? `${oficiais} evento(s) oficial(is). ${erro} de ${consultadas.length} fontes não responderam.`
@@ -240,20 +231,6 @@ export default function App() {
     setAutoUpdate(novo);
     storage.setAutoUpdate(novo);
     showToast(novo ? 'Auto-atualização ligada (a cada 30 min, nesta aba).' : 'Auto-atualização desligada.');
-  };
-
-  const handleToggleModoDemo = () => {
-    const novo = !modoDemo;
-    setModoDemo(novo);
-    storage.setModoDemo(novo);
-    showToast(
-      novo
-        ? 'Modo demonstração LIGADO: a agenda passa a incluir uma amostra ilustrativa marcada como "Exemplo".'
-        : 'Modo demonstração desligado: somente dados das fontes oficiais.'
-    );
-    // Passa o valor explicitamente: `sincronizarDados` é memoizado e ainda
-    // enxergaria o modo anterior.
-    void sincronizarDados(novo);
   };
 
   // ------------------------------------------------------------- Favoritos
@@ -339,10 +316,9 @@ export default function App() {
     [eventosFiltrados, visibleCount]
   );
 
-  const oficials = useMemo(() => separarPorOrigem(eventos), [eventos]);
   const totalEncerrados = useMemo(
-    () => oficials.reais.filter((e) => estaEncerrado(e)).length,
-    [oficials.reais]
+    () => eventos.filter((e) => estaEncerrado(e)).length,
+    [eventos]
   );
 
   // ------------------------------------------------------- Atalhos de teclado
@@ -398,27 +374,10 @@ export default function App() {
         onToggleTheme={handleToggleTheme}
         autoUpdate={autoUpdate}
         onToggleAutoUpdate={handleToggleAutoUpdate}
-        modoDemo={modoDemo}
-        onToggleModoDemo={handleToggleModoDemo}
         onOpenMobileFilters={() => setMobileFilterOpen(true)}
       />
 
-      <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-6">
-        {/* Avisos globais: amostra ilustrativa e falha de cache */}
-        {modoDemo && (
-          <div
-            role="note"
-            className="flex items-start gap-3 p-4 rounded-2xl border border-amber-300 bg-amber-50 dark:bg-amber-950/30 dark:border-amber-800 text-amber-900 dark:text-amber-200 text-xs"
-          >
-            <FlaskConical className="w-4 h-4 shrink-0 mt-0.5" aria-hidden="true" />
-            <p>
-              <strong>Modo demonstração ligado.</strong> A agenda inclui uma amostra ilustrativa
-              ({oficials.demonstracao.length} registros) escrita no código para exercitar a interface. Ela está
-              marcada com o selo <em>Exemplo</em>, não é dado oficial, boa parte dos links de inscrição não existe, e
-              nenhum registro dela entra em exportações.
-            </p>
-          </div>
-        )}
+      <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-6">{/* Avisos globais: falha de cache */}
 
         {avisoCota && (
           <div

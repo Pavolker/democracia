@@ -13,9 +13,7 @@ import { resumir } from './texto';
  *    (antes eram horários "flutuantes", reinterpretados no fuso do
  *    destinatário), CRLF e `STATUS` derivado do evento real (antes era
  *    sempre `CONFIRMED`, inclusive para evento cancelado);
- *  - o CSV cita TODOS os campos (antes só três), então um `;` ou `"` vindo
- *    de uma fonte oficial não corrompe mais a linha;
- *  - nenhuma exportação carrega dados de demonstração.
+ *  - todos os dados exportados provêm exclusivamente de fontes oficiais.
  */
 
 /** Escapa um valor TEXT conforme RFC 5545 §3.3.11. */
@@ -237,10 +235,7 @@ export function exportarJSON(eventos: Evento[]): void {
     {
       gerado_em: new Date().toISOString(),
       fuso: FUSO_BRASIL,
-      // Sem rodeios: quem abrir o arquivo sabe o que está recebendo.
-      aviso:
-        'Somente eventos obtidos de fontes oficiais em tempo de execução. ' +
-        'Amostras ilustrativas do modo de demonstração são excluídas das exportações.',
+      aviso: 'Somente eventos obtidos de fontes oficiais em tempo de execução.',
       total: exportaveis.length,
       eventos: exportaveis
     },

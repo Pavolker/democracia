@@ -6,8 +6,7 @@ import {
   Monitor,
   SlidersHorizontal,
   BarChart3,
-  Database,
-  FlaskConical
+  Database
 } from 'lucide-react';
 
 export type TabType = 'eventos' | 'mapa' | 'calendario' | 'favoritos' | 'alertas' | 'comparador' | 'fontes';
@@ -34,8 +33,6 @@ interface HeaderProps {
   onToggleTheme: () => void;
   autoUpdate: boolean;
   onToggleAutoUpdate: () => void;
-  modoDemo: boolean;
-  onToggleModoDemo: () => void;
   onOpenMobileFilters?: () => void;
 }
 
@@ -60,8 +57,6 @@ export const Header: React.FC<HeaderProps> = ({
   onToggleTheme,
   autoUpdate,
   onToggleAutoUpdate,
-  modoDemo,
-  onToggleModoDemo,
   onOpenMobileFilters
 }) => {
   const formatarHora = (iso: string | null): string | null => {
@@ -141,25 +136,6 @@ export const Header: React.FC<HeaderProps> = ({
               </button>
             </div>
 
-            {/* Modo demonstração */}
-            <button
-              type="button"
-              onClick={onToggleModoDemo}
-              aria-pressed={modoDemo}
-              className={`hidden md:flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl text-xs font-medium border transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-amber-500 ${
-                modoDemo
-                  ? 'bg-amber-50 text-amber-800 border-amber-300 dark:bg-amber-950/40 dark:text-amber-300 dark:border-amber-800'
-                  : 'bg-slate-100 text-slate-500 border-slate-200 dark:bg-slate-800 dark:text-slate-400 dark:border-slate-700'
-              }`}
-              title={
-                modoDemo
-                  ? 'Modo demonstração ligado: a agenda inclui uma amostra ilustrativa marcada como "Exemplo". Nada dela entra em exportações.'
-                  : 'Modo demonstração desligado: a agenda mostra somente dados obtidos das fontes oficiais.'
-              }
-            >
-              <FlaskConical className="w-3.5 h-3.5" aria-hidden="true" />
-              <span>Exemplos: {modoDemo ? 'on' : 'off'}</span>
-            </button>
 
             {/* Auto-atualização */}
             <button

@@ -14,7 +14,6 @@ import {
   Video,
   Sparkles,
   Users,
-  FlaskConical,
   Ban,
   CheckCircle2
 } from 'lucide-react';
@@ -34,7 +33,6 @@ interface EventCardProps {
  *  - o status passou a ser exibido. Antes `evento.status` não era lido em lugar
  *    nenhum do cartão, então um evento CANCELADO aparecia idêntico a um
  *    confirmado. Eventos já realizados também ficam visualmente atenuados;
- *  - registros do modo de demonstração recebem o selo "Exemplo";
  *  - o título virou um botão de verdade (era um `<h4 onClick>`, inalcançável
  *    por teclado e invisível para leitor de tela como controle);
  *  - os botões de ícone ganharam `aria-label` (só tinham `title`).
@@ -102,14 +100,7 @@ export const EventCard: React.FC<EventCardProps> = ({
             </span>
           )}
 
-          {evento.origem === 'demonstracao' && (
-            <span
-              className="inline-flex items-center gap-1 text-[11px] font-semibold px-2 py-0.5 rounded-full bg-amber-500 text-white"
-              title="Registro ilustrativo do modo de demonstração: não é dado oficial e não entra em exportações."
-            >
-              <FlaskConical className="w-3 h-3" aria-hidden="true" /> Exemplo
-            </span>
-          )}
+
         </div>
 
         <button
